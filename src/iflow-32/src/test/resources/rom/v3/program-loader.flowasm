@@ -1,0 +1,631 @@
+; iflow-32 guest program loader (V4 slice).
+;
+; BIOS (core 0): POST minimo, escaneo de la TOC, page tables y MMU. Publica
+; boot_ready antes de encender la MMU. Los demas cores se aparcan.
+; BOOT: copia KERNEL de ROM a RAM y salta a su entry point.
+; KERNEL: valida PRG3 del unico PROGRAM, copia el segmento a un alias fisico,
+; zero-fill hasta memSize, construye el mapeo W^X con U=1, asigna PIDENT y
+; MIDENT, entra en modo usuario y espera el ECALL de salida. El programa llama
+; a HOST MESSAGE_ID y escribe el estado en su pila.
+;
+; El host solo mapea el contenedor ROM en 0x0 y valida hash, TOC y PRG3 con
+; RomParser. El guest revalida la estructura PRG3 que consume (magic, rangos,
+; capacidades) y no recalcula SHA-256 ni interpreta nombres de capacidad: eso
+; es identidad del host.
+;
+; Scratch (RAM fisica, identidad tras encender la MMU):
+;   0x0200E000 boot.offset      0x0200E004 boot.size
+;   0x0200E008 boot.entry       0x0200E00C boot.loadAddress
+;   0x0200E010 kernel.offset    0x0200E014 kernel.size
+;   0x0200E018 kernel.entry     0x0200E01C kernel.loadAddress
+;   0x0200E020 kernel.memSize   0x0200E030 boot marker
+;   0x0200E034 trap marker      0x0200E038 trap cause
+;   0x0200E040 boot_ready       0x0200E044 kernel_ready
+;   0x0200E070 program.offset   0x0200E074 program.size
+;   0x0200E078 program.entry    0x0200E07C program.loadAddress
+;   0x0200E080 program.memSize  0x0200E084 program.count
+;   0x0200E088 PRG3.codeOffset  0x0200E08C PRG3.codeEnd
+;   0x0200E090 PRG3.dataOffset  0x0200E094 PRG3.dataEnd
+;   0x0200E098 PRG3.capsOffset  0x0200E09C PRG3.capsLength
+;   0x0200E0A0 program_loaded   0x0200E0A4 program_done
+;   0x0200E0A8 host_status      0x0200E0AC host_length
+;   0x0200E0B0 program.pages
+;
+; Page tables:
+;   0x02000000 L1
+;   0x02001000..0x02004000 L2 ROM (16 MiB, identidad R/X supervisor)
+;   0x02005000 L2 RAM (4 MiB, identidad R/W supervisor)
+;   0x02006000 L2 kernel (4 MiB, R/X supervisor)
+;   0x02007000 L2 usuario (PROGRAM en 0x02500000 y pila en 0x02600000)
+;   0x02008000 L2 alias fisico (0x02800000..0x02BFFFFF, R/W supervisor)
+;   0x02010000 copia de BOOT (4 KiB)
+;   0x02020000 copia de KERNEL (hasta 4 MiB)
+;
+; Mapa del programa:
+;   0x02500000 virtual -> 0x02800000 fisico (codigo R/X/U, datos y bss R/W/U)
+;   0x02600000 virtual -> 0x02900000 fisico (pila R/W/U)
+;   0x02600400 host_status      0x02600404 host_length
+;   0x02600800 buffer de resultado HOST (64 bytes)
+;
+; El kernel acepta un unico PROGRAM en 0x02500000 con memSize <= 0x10000 y
+; datos alineados a pagina despues del codigo. Fuera de ese contrato falla con
+; un marcador BADxxxxxx explicito; no hay relocacion ni fallback.
+
+.section .bios
+.org 0x00001000
+.entry start
+start:
+    CSRR R1, COREID
+    CMP R1, 0
+    JZ core0
+
+park:
+    CSRR R1, STATUS
+    OR R1, 1
+    CSRW STATUS, R1
+    HALT
+    JMP park
+
+core0:
+    MOV R0, 0
+    MOV R9, 0x02000000
+    MOV SP, 0x023FF000
+
+    ; Escanear la TOC: cabecera en ROM fisica 0.
+    MOV R1, [R0 + 28]
+    MOV R2, [R0 + 32]
+    AND R2, 0xFFFF
+    CMP R2, 0
+    JZ toc_empty
+    MOV R3, R1
+scan:
+    MOV.B R4, [R3]
+    CMP R4, 2
+    JNE scan_kernel
+    MOV R5, [R3 + 4]
+    MOV [R9 + 0xE000], R5
+    MOV R5, [R3 + 8]
+    MOV [R9 + 0xE004], R5
+    MOV R5, [R3 + 16]
+    MOV [R9 + 0xE008], R5
+    MOV R5, [R3 + 12]
+    MOV [R9 + 0xE00C], R5
+    JMP scan_next
+scan_kernel:
+    CMP R4, 3
+    JNE scan_program
+    MOV R5, [R3 + 4]
+    MOV [R9 + 0xE010], R5
+    MOV R5, [R3 + 8]
+    MOV [R9 + 0xE014], R5
+    MOV R5, [R3 + 16]
+    MOV [R9 + 0xE018], R5
+    MOV R5, [R3 + 12]
+    MOV [R9 + 0xE01C], R5
+    MOV R5, [R3 + 20]
+    MOV [R9 + 0xE020], R5
+    JMP scan_next
+scan_program:
+    CMP R4, 4
+    JNE scan_next
+    MOV R5, [R9 + 0xE084]
+    ADD R5, 1
+    MOV [R9 + 0xE084], R5
+    MOV R5, [R3 + 4]
+    MOV [R9 + 0xE070], R5
+    MOV R5, [R3 + 8]
+    MOV [R9 + 0xE074], R5
+    MOV R5, [R3 + 16]
+    MOV [R9 + 0xE078], R5
+    MOV R5, [R3 + 12]
+    MOV [R9 + 0xE07C], R5
+    MOV R5, [R3 + 20]
+    MOV [R9 + 0xE080], R5
+scan_next:
+    ADD R3, 64
+    SUB R2, 1
+    JNZ scan
+
+    ; Limites de este slice: BOOT en una pagina, KERNEL en 4 MiB.
+    MOV R1, [R9 + 0xE004]
+    CMP R1, 0x1000
+    JHI boot_too_big
+    MOV R1, [R9 + 0xE020]
+    CMP R1, 0x400000
+    JHI kernel_too_big
+
+    ; L1: ROM 0..16 MiB, RAM 0x02000000, kernel 0x80000000, usuario y alias.
+    MOV R1, 0x02000000
+    MOV R11, 0x02001000
+    OR R11, 1
+    MOV [R1 + 0], R11
+    MOV R11, 0x02002000
+    OR R11, 1
+    MOV [R1 + 4], R11
+    MOV R11, 0x02003000
+    OR R11, 1
+    MOV [R1 + 8], R11
+    MOV R11, 0x02004000
+    OR R11, 1
+    MOV [R1 + 12], R11
+    MOV R11, 0x02005000
+    OR R11, 1
+    MOV [R1 + 32], R11
+    MOV R11, 0x02006000
+    OR R11, 1
+    MOV [R1 + 2048], R11
+    MOV R11, 0x02007000
+    OR R11, 1
+    MOV [R1 + 36], R11
+    MOV R11, 0x02008000
+    OR R11, 1
+    MOV [R1 + 40], R11
+
+    ; L2 ROM: 4 tablas de 1024 paginas R/X supervisor.
+    MOV R12, 1024
+    MOV R1, 0x02001000
+    MOV R2, 0x00000000
+    CALL fill_rx
+    MOV R12, 1024
+    MOV R1, 0x02002000
+    MOV R2, 0x00400000
+    CALL fill_rx
+    MOV R12, 1024
+    MOV R1, 0x02003000
+    MOV R2, 0x00800000
+    CALL fill_rx
+    MOV R12, 1024
+    MOV R1, 0x02004000
+    MOV R2, 0x00C00000
+    CALL fill_rx
+
+    ; L2 RAM: 1024 paginas R/W supervisor (el kernel no comparte RAM con U).
+    MOV R12, 1024
+    MOV R1, 0x02005000
+    MOV R2, 0x02000000
+    CALL fill_rw_sup
+
+    ; L2 kernel: pagina 0 para BOOT, 1..1023 para KERNEL.
+    MOV R1, 0x02006000
+    MOV R2, 0x02010000
+    MOV R3, R2
+    OR R3, 0x15
+    MOV [R1], R3
+    MOV R12, 1023
+    MOV R1, 0x02006004
+    MOV R2, 0x02020000
+    CALL fill_rx
+
+    ; L2 alias fisico: identidad 0x02800000..0x02BFFFFF, R/W supervisor.
+    MOV R12, 1024
+    MOV R1, 0x02008000
+    MOV R2, 0x02800000
+    CALL fill_rw_sup
+
+    ; L2 usuario: limpio; el kernel lo rellena al cargar el programa.
+    MOV R1, 0x02007000
+    MOV R2, 0
+    MOV R3, 1024
+clear_user:
+    MOV [R1], R2
+    ADD R1, 4
+    SUB R3, 1
+    JNZ clear_user
+
+    ; Copiar BOOT a RAM, publicar boot_ready y saltar a su direccion virtual.
+    MOV R1, [R9 + 0xE000]
+    MOV R2, 0x02010000
+    MOV R3, [R9 + 0xE004]
+    CALL copy_bytes
+
+    MOV R1, 0x600D0001
+    MOV [R9 + 0xE030], R1
+    MOV R1, 1
+    MOV [R9 + 0xE040], R1
+
+    MOV R1, 0x02000000
+    CSRW PTBR, R1
+    CSRR R1, STATUS
+    OR R1, 0x10
+    CSRW STATUS, R1
+    MOV R5, [R9 + 0xE008]
+    JMP R5
+
+toc_empty:
+    MOV R1, 0xBAD00000
+    MOV [R9 + 0xE030], R1
+    CSRR R1, STATUS
+    OR R1, 1
+    CSRW STATUS, R1
+    HALT
+boot_too_big:
+    MOV R1, 0xBAD00001
+    MOV [R9 + 0xE030], R1
+    CSRR R1, STATUS
+    OR R1, 1
+    CSRW STATUS, R1
+    HALT
+kernel_too_big:
+    MOV R1, 0xBAD00002
+    MOV [R9 + 0xE030], R1
+    CSRR R1, STATUS
+    OR R1, 1
+    CSRW STATUS, R1
+    HALT
+
+; R1 = tabla, R2 = primer frame, R12 = paginas. PTE R/X supervisor.
+fill_rx:
+    MOV R3, R2
+    OR R3, 0x15
+    MOV [R1], R3
+    ADD R1, 4
+    ADD R2, 0x1000
+    SUB R12, 1
+    JNZ fill_rx
+    RET
+
+; R1 = tabla, R2 = primer frame, R12 = paginas. PTE R/W supervisor.
+fill_rw_sup:
+    MOV R3, R2
+    OR R3, 0x0D
+    MOV [R1], R3
+    ADD R1, 4
+    ADD R2, 0x1000
+    SUB R12, 1
+    JNZ fill_rw_sup
+    RET
+
+; R1 = origen, R2 = destino, R3 = bytes.
+copy_bytes:
+    MOV.B R4, [R1]
+    MOV.B [R2], R4
+    ADD R1, 1
+    ADD R2, 1
+    SUB R3, 1
+    JNZ copy_bytes
+    RET
+
+.section .boot
+.org 0x80000000
+.entry boot
+boot:
+    MOV R9, 0x02000000
+
+    ; Copiar KERNEL de ROM (identidad) a su frame RAM.
+    MOV R1, [R9 + 0xE010]
+    MOV R2, 0x02020000
+    MOV R3, [R9 + 0xE014]
+boot_copy:
+    MOV.B R4, [R1]
+    MOV.B [R2], R4
+    ADD R1, 1
+    ADD R2, 1
+    SUB R3, 1
+    JNZ boot_copy
+
+    MOV R1, 1
+    MOV [R9 + 0xE044], R1
+
+    SFENCE.VMA
+    MOV R5, [R9 + 0xE018]
+    JMP R5
+
+.section .kernel
+.org 0x80001000
+.entry kmain
+
+; El hardware salta a TVEC + 4*CAUSE. El vector 0 ocupa 0..6 y el 7 (ECALL
+; de usuario) empieza en el offset 28, sin solapar el stub generico.
+trap_table:
+    JMP generic_trap
+    .space 21
+    JMP user_exit
+
+kmain:
+    MOV R9, 0x02000000
+    MOV R1, trap_table
+    CSRW TVEC, R1
+
+    ; Sin IRQ pendientes en este slice: timer apagado y PIC enmascarado.
+    CSRR R1, STATUS
+    OR R1, 1
+    CSRW STATUS, R1
+
+    MOV R1, [R9 + 0xE084]
+    CMP R1, 1
+    JNE bad_count
+
+    ; Validar PRG3 del unico PROGRAM.
+    MOV R1, [R9 + 0xE070]
+    MOV R2, [R1]
+    MOV R3, 0x33475250
+    CMP R2, R3
+    JNE bad_magic
+    MOV R2, [R1 + 4]
+    MOV [R9 + 0xE088], R2
+    MOV R3, [R1 + 8]
+    MOV [R9 + 0xE08C], R3
+    MOV R4, [R1 + 12]
+    MOV [R9 + 0xE090], R4
+    MOV R5, [R1 + 16]
+    MOV [R9 + 0xE094], R5
+    MOV R6, [R1 + 20]
+    MOV [R9 + 0xE098], R6
+    MOV R7, [R1 + 24]
+    MOV [R9 + 0xE09C], R7
+    MOV R8, [R1 + 28]
+    CMP R8, 0
+    JNE bad_reserved
+
+    MOV R1, [R9 + 0xE074]
+    CMP R1, 32
+    JAE bad_size
+    MOV R1, [R9 + 0xE080]
+    CMP R1, 0x10000
+    JHI bad_size
+    MOV R1, [R9 + 0xE080]
+    MOV R2, [R9 + 0xE074]
+    CMP R1, R2
+    JAE bad_size
+
+    MOV R1, [R9 + 0xE07C]
+    MOV R2, 0x02500000
+    CMP R1, R2
+    JNE bad_load
+
+    MOV R1, [R9 + 0xE078]
+    SUB R1, R2
+    MOV R3, [R9 + 0xE088]
+    CMP R1, R3
+    JAE bad_entry
+    MOV R4, [R9 + 0xE08C]
+    CMP R1, R4
+    JB bad_entry
+
+    MOV R1, [R9 + 0xE088]
+    CMP R1, 32
+    JAE bad_code
+    MOV R1, [R9 + 0xE08C]
+    MOV R2, [R9 + 0xE088]
+    CMP R1, R2
+    JLS bad_code
+    MOV R3, [R9 + 0xE074]
+    CMP R1, R3
+    JHI bad_code
+
+    MOV R1, [R9 + 0xE090]
+    MOV R2, [R9 + 0xE094]
+    CMP R2, R1
+    JAE bad_data
+    CMP R1, 0
+    JNZ data_present
+    CMP R2, 0
+    JNE bad_data
+    JMP data_checked
+data_present:
+    MOV R3, [R9 + 0xE08C]
+    CMP R1, R3
+    JAE bad_data
+    MOV R3, [R9 + 0xE074]
+    CMP R2, R3
+    JHI bad_data
+    MOV R3, [R9 + 0xE080]
+    CMP R3, R2
+    JAE bad_data
+    ; Los datos deben empezar en una pagina propia para conservar W^X.
+    MOV R3, [R9 + 0xE08C]
+    ADD R3, 0xFFF
+    SHR R3, 12
+    SHL R3, 12
+    CMP R1, R3
+    JAE bad_data
+data_checked:
+
+    ; Capacidades: blob dentro del segmento y tras codigo/datos.
+    MOV R6, [R9 + 0xE098]
+    MOV R7, [R9 + 0xE09C]
+    CMP R7, 0
+    JNE caps_present
+    CMP R6, 0
+    JNE bad_caps
+    JMP caps_ok
+caps_present:
+    CMP R6, 32
+    JAE bad_caps
+    MOV R8, [R9 + 0xE08C]
+    MOV R1, [R9 + 0xE094]
+    CMP R1, R8
+    JLS caps_max_done
+    MOV R8, R1
+caps_max_done:
+    CMP R6, R8
+    JAE bad_caps
+    MOV R1, [R9 + 0xE074]
+    SUB R1, R6
+    CMP R7, R1
+    JHI bad_caps
+    CMP R7, 2
+    JAE bad_caps
+    MOV R1, [R9 + 0xE070]
+    ADD R1, R6
+    MOV.H R2, [R1]
+    ADD R1, 2
+    MOV R3, R1
+    ADD R3, R7
+    SUB R3, 2
+caps_loop:
+    CMP R2, 0
+    JZ caps_ok
+    CMP R1, R3
+    JB bad_caps
+    MOV.H R4, [R1]
+    CMP R4, 0
+    JZ bad_caps
+    CMP R4, 128
+    JHI bad_caps
+    ADD R1, 2
+    ADD R1, R4
+    CMP R1, R3
+    JHI bad_caps
+    SUB R2, 1
+    JMP caps_loop
+caps_ok:
+
+    ; Copiar el segmento completo (PRG3 + codigo + capacidades) al alias.
+    MOV R1, [R9 + 0xE070]
+    MOV R2, 0x02800000
+    MOV R3, [R9 + 0xE074]
+    CALL copy_bytes
+
+    ; Zero-fill desde size hasta memSize.
+    MOV R1, [R9 + 0xE074]
+    MOV R2, 0x02800000
+    ADD R2, R1
+    MOV R3, [R9 + 0xE080]
+    SUB R3, R1
+    JZ zero_done
+zero_loop:
+    MOV R4, 0
+    MOV.B [R2], R4
+    ADD R2, 1
+    SUB R3, 1
+    JNZ zero_loop
+zero_done:
+
+    ; Paginas del programa, con W^X por pagina: codigo 0x35, datos/bss 0x2D.
+    MOV R3, [R9 + 0xE080]
+    ADD R3, 0xFFF
+    SHR R3, 12
+    MOV [R9 + 0xE0B0], R3
+    MOV R4, 0x02800000
+    MOV R5, 0x02007400
+    MOV R6, [R9 + 0xE08C]
+    ADD R6, 0xFFF
+    SHR R6, 12
+map_pages:
+    MOV R7, R4
+    CMP R6, 0
+    JZ map_data
+    OR R7, 0x35
+    SUB R6, 1
+    JMP map_store
+map_data:
+    OR R7, 0x2D
+map_store:
+    MOV [R5], R7
+    ADD R4, 0x1000
+    ADD R5, 4
+    SUB R3, 1
+    JNZ map_pages
+
+    ; Pila de usuario: 0x02600000 -> 0x02900000, R/W/U.
+    MOV R1, 0x02900000
+    OR R1, 0x2D
+    MOV R2, 0x02007800
+    MOV [R2], R1
+    FENCE
+    SFENCE.VMA
+
+    ; Identidad del programa y del mensaje de prueba.
+    MOV R1, 0
+    CSRW PIDENT, R1
+    MOV R1, 1
+    CSRW MIDENT, R1
+
+    MOV R1, 1
+    MOV [R9 + 0xE0A0], R1
+
+    ; Entrar en modo usuario en el entry point del programa.
+    MOV SP, 0x02600F00
+    MOV R1, [R9 + 0xE078]
+    CSRW EPC, R1
+    MOV R1, 0x36
+    CSRW STATUS, R1
+    ERET
+
+bad_count:
+    MOV R1, 0xBAD00003
+    JMP fail
+bad_magic:
+    MOV R1, 0xBAD00004
+    JMP fail
+bad_reserved:
+    MOV R1, 0xBAD00005
+    JMP fail
+bad_size:
+    MOV R1, 0xBAD00006
+    JMP fail
+bad_load:
+    MOV R1, 0xBAD00007
+    JMP fail
+bad_entry:
+    MOV R1, 0xBAD00008
+    JMP fail
+bad_code:
+    MOV R1, 0xBAD00009
+    JMP fail
+bad_data:
+    MOV R1, 0xBAD0000A
+    JMP fail
+bad_caps:
+    MOV R1, 0xBAD0000B
+fail:
+    MOV [R9 + 0xE034], R1
+    CSRR R1, STATUS
+    OR R1, 1
+    CSRW STATUS, R1
+    HALT
+
+; Vector 7 (ECALL de usuario): registrar la causa y terminar la maquina.
+user_exit:
+    MOV R4, 0x0200E0A8
+    MOV [R4], R0
+    MOV [R4 + 4], R1
+    CSRR R3, CAUSE
+    MOV R1, 0x0200E038
+    MOV [R1], R3
+    CMP R3, 7
+    JNE generic_trap
+    MOV R1, 1
+    MOV R2, 0x0200E0A4
+    MOV [R2], R1
+    CSRR R1, STATUS
+    OR R1, 1
+    CSRW STATUS, R1
+    HALT
+
+; Cualquier trap inesperado deja evidencia y detiene el core.
+generic_trap:
+    MOV R1, 0xBAD0000C
+    MOV R2, 0x0200E034
+    MOV [R2], R1
+    CSRR R3, CAUSE
+    MOV R2, 0x0200E038
+    MOV [R2], R3
+    CSRR R1, STATUS
+    OR R1, 1
+    CSRW STATUS, R1
+    HALT
+
+.section .program.loader
+.org 0x02500000
+.entry program_start
+.capability iflow.message.id
+
+program_start:
+    MOV R2, 0
+    MOV R3, 0
+    MOV R4, 0x02600800
+    MOV R5, 64
+    MOV R0, 0x0701
+    MOV R1, 0
+    HOST
+
+    ; Guardar estado y longitud del resultado en la pila del programa.
+    MOV R6, 0x02600400
+    MOV [R6], R0
+    MOV [R6 + 4], R1
+
+    ECALL
+program_hang:
+    JMP program_hang

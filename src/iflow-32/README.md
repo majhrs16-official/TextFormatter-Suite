@@ -1,11 +1,13 @@
 # iflow-32 — VM de 32 bits (núcleo v3)
 
-> **Estado:** núcleo v3 aislado (335 tests); V3-1 (tiempo, quantum y watchdog configurable)
+> **Estado:** núcleo v3 aislado (337 tests); V3-1 (tiempo, quantum y watchdog configurable)
 > implementado; V3-2 completado (`CORE_COUNT` 1..64, `COREID`, `SYSINFO`, atómicas, PIC por core,
 > IPI, `TARGET`, vista `CoreMemory` por core, `MachineRuntime` por core, journal concurrente por
 > mensaje, backend `.flowasm` v3 `iflow-as -f iflow-32` con ROM `FLOWROM` v3/`PRG3` y kernel guest
 > con scheduler, IPI y TLB shootdown); V3-3 completado (snapshot COW, apagado y reinicio en
-> frío con NVRAM persistente). Falta la integración con el hub.
+> frío con NVRAM persistente); V4 loader slice completado (el kernel guest carga el `PROGRAM`,
+> mapea `W^X`, entra en modo usuario y ejecuta `HOST`). Falta el resto de V4: varios programas,
+> load addresses arbitrarias y la integración con el hub.
 >
 > Este módulo implementa el contrato de ADR-037: ISA v3 de 32 bits, MMU paginada, bus MMIO,
 > dispositivos, PIC/timer y ABI `HOST` v3. No comparte núcleo, decoder, MMU, formato ROM ni ABI con
@@ -110,3 +112,12 @@ la configuración del módulo.
   `coldReset()` limpia RAM y registros conservando esa NVRAM. `CORE_COUNT` 1..64 está habilitado.
 - Todavía no está cableado al hub ni tiene `ModuleActivator` propio. El motor v2
   (`VmPolicyEngine`/`VmConfigLoader`/`Iflow16Activator`) no forma parte de esta línea.
+- V4 loader slice: el kernel guest acepta **un solo** `PROGRAM` en `0x02500000` con
+  `memSize <= 64 KiB` y datos alineados a página después del código. Valida magic/estructura
+  `PRG3`, copia el segmento a `0x02800000`, zero-fill hasta `memSize`, mapea código `R/X/U`,
+  datos/bss y pila `R/W/U` (sin `W && X` por página) y entra en U con `PIDENT` 0 y `MIDENT` 1.
+  El host sigue siendo el único que verifica SHA-256 y nombres de capacidad (`RomParser`); el
+  guest revalida los rangos que consume. Más de un programa, otra `loadAddress`, `memSize`
+  mayor o datos que compartan página con código fallan con un marcador `BADxxxxxx` explícito,
+  sin relocación ni fallback. Los programas múltiples y el scheduler de procesos quedan
+  pendientes en V4.
