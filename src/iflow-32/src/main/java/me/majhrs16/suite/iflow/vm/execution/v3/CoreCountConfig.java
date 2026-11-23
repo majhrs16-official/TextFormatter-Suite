@@ -17,8 +17,8 @@ import org.yaml.snakeyaml.constructor.SafeConstructor;
  *
  * <p>El valor canónico vive en {@code config/iflow-32/config.yml} bajo la clave
  * {@code core-count}. Un archivo ausente o una clave ausente usan un único core. El rango
- * arquitectónico es 1..64, pero V3-2 todavía no implementa el multinúcleo: un valor mayor que 1
- * falla de forma explícita en lugar de degradarse a un solo core.</p>
+ * arquitectónico es 1..64; todos los valores del rango están soportados por la VM, y el host
+ * crea un vCPU por core sin degradar la petición ni elegir el core de un mensaje.</p>
  *
  * @param coreCount número de vCPU de la misma VM
  */
@@ -83,9 +83,7 @@ public record CoreCountConfig(int coreCount) {
                         "core-count must be " + MIN_CORE_COUNT + ".." + MAX_CORE_COUNT
                                 + ": " + rawCoreCount);
             }
-            CoreCountConfig config = new CoreCountConfig((int) parsed);
-            config.requireSupported();
-            return config;
+            return new CoreCountConfig((int) parsed);
         } catch (ConfigVersionException | IllegalArgumentException e) {
             throw e;
         } catch (IOException e) {
@@ -97,16 +95,5 @@ public record CoreCountConfig(int coreCount) {
     /** @return {@code true} si la configuración pide más de un core. */
     public boolean multicore() {
         return coreCount > 1;
-    }
-
-    /**
-     * Falla explícitamente mientras V3-2 no entregue estado por core, atómicas, IPI, PIC por core,
-     * TLB shootdown y journal concurrente.
-     */
-    public void requireSupported() {
-        if (multicore()) {
-            throw new UnsupportedOperationException(
-                    "CORE_COUNT > 1 requires V3-2; refusing to degrade to a single core");
-        }
     }
 }

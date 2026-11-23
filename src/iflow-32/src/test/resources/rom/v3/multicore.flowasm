@@ -46,10 +46,21 @@ start:
     CMP R1, 0
     JZ core0
 
-; Cores 1..N-1: esperan la publicacion del kernel con MMU apagada.
+; Cores 1..N-1: duermen hasta que el kernel se publique. El core 0 envia una
+; IPI broadcast de linea 16 al publicar kernel_ready; el stub de BIOS la
+; reconoce y ERET vuelve al bucle, que vuelve a dormir si aun no hay kernel.
 secondary:
     MOV R9, 0x02000000
+    MOV R1, bios_tvec
+    CSRW TVEC, R1
+    MOV R1, 0xFFFEFFFF
+    MOV R2, 0x01002004
+    MOV [R2], R1
+    CSRR R1, STATUS
+    OR R1, 1
+    CSRW STATUS, R1
 wait_kernel:
+    HALT
     MOV R1, [R9 + 0xE044]
     CMP R1, 0
     JZ wait_kernel
@@ -204,6 +215,22 @@ kernel_too_big:
     MOV [R9 + 0xE030], R1
     HALT
 
+; Despertar desde la IPI de liberacion: reconocer la linea 16 y volver al bucle.
+; El hardware salta a TVEC + 4*32, asi que el stub vive en el offset 128.
+.align 256
+bios_tvec:
+    JMP bios_trap
+    .space 121
+    JMP bios_wake
+    .space 121
+bios_wake:
+    MOV R1, 0x00010000
+    MOV R2, 0x01002008
+    MOV [R2], R1
+    ERET
+bios_trap:
+    JMP bios_trap
+
 ; R1 = tabla, R2 = primer frame, R12 = paginas. PTE R/X.
 fill_rx:
     MOV R3, R2
@@ -256,6 +283,11 @@ boot_copy:
 
     MOV R1, 1
     MOV [R9 + 0xE044], R1
+
+    ; Despertar a los secundarios que duermen en el BIOS.
+    MOV R1, 0xFF10
+    MOV R2, 0x01002010
+    MOV [R2], R1
 
     SFENCE.VMA
     MOV R5, [R9 + 0xE018]

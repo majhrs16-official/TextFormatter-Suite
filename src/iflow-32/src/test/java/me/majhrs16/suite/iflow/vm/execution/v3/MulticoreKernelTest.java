@@ -112,22 +112,24 @@ class MulticoreKernelTest {
 
     private static void runUntilAllCoresHalt(MachineRuntime runtime) {
         for (int round = 0; round < MAX_ROUNDS; round++) {
-            boolean allHalted = true;
             boolean scheduler = word(runtime.memory(), SCHED_START) != 0;
             ExecutionQuantum slice = scheduler
                     ? new ExecutionQuantum(1, 50_000_000L)
                     : runtime.quantum();
             for (int coreId = 0; coreId < runtime.coreCount(); coreId++) {
-                if (runtime.core(coreId).cpu().halted()) {
-                    continue;
-                }
-                allHalted = false;
                 ExecutionReport report = runtime.runCore(coreId, slice);
                 if (report.status() == ExecutionStatus.WATCHDOG) {
                     fail("core " + coreId + " hit the watchdog");
                 }
             }
-            if (allHalted) {
+            // A halted core may be waiting for an IPI, so it is retried every
+            // round; the run ends only when the scheduler finished and every
+            // core halted.
+            boolean allHalted = true;
+            for (int coreId = 0; coreId < runtime.coreCount(); coreId++) {
+                allHalted &= runtime.core(coreId).cpu().halted();
+            }
+            if (allHalted && word(runtime.memory(), SCHEDULER_DONE) != 0) {
                 return;
             }
         }

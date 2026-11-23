@@ -1,11 +1,11 @@
 # iflow-32 — VM de 32 bits (núcleo v3)
 
-> **Estado:** núcleo v3 aislado (328 tests); V3-1 (tiempo, quantum y watchdog configurable)
-> implementado; V3-2 en curso (`CORE_COUNT`, `COREID`, `SYSINFO`, atómicas, PIC por core, IPI,
-> `TARGET`, vista `CoreMemory` por core, `MachineRuntime` por core, journal concurrente por
-> mensaje y V3-2a: backend `.flowasm` v3 `iflow-as -f iflow-32` con ROM `FLOWROM` v3/`PRG3`); faltan
-> el kernel guest con scheduler/shootdown, el loader del host que copia los segmentos a su
-> `loadAddress`, la persistencia entre mensajes y la integración con el hub.
+> **Estado:** núcleo v3 aislado (331 tests); V3-1 (tiempo, quantum y watchdog configurable)
+> implementado; V3-2 completado (`CORE_COUNT` 1..64, `COREID`, `SYSINFO`, atómicas, PIC por core,
+> IPI, `TARGET`, vista `CoreMemory` por core, `MachineRuntime` por core, journal concurrente por
+> mensaje, backend `.flowasm` v3 `iflow-as -f iflow-32` con ROM `FLOWROM` v3/`PRG3` y kernel guest
+> con scheduler, IPI y TLB shootdown); faltan la persistencia entre mensajes y la integración con
+> el hub.
 >
 > Este módulo implementa el contrato de ADR-037: ISA v3 de 32 bits, MMU paginada, bus MMIO,
 > dispositivos, PIC/timer y ABI `HOST` v3. No comparte núcleo, decoder, MMU, formato ROM ni ABI con
@@ -78,33 +78,32 @@ watchdog:
 Un archivo ausente mantiene el watchdog activo y un único core. Un valor que no sea booleano, una
 raíz que no sea mapa o una versión ausente/incorrecta fallan de forma explícita. Desactivar el
 watchdog registra un `warn`, no cambia el quantum y deja sin recuperación un `cpu.step()` que no
-retorne. `core-count` acepta el rango arquitectónico 1..64, pero V3-2 todavía no implementa el
-multinúcleo: un valor mayor que 1 falla con `UnsupportedOperationException` en vez de degradarse a
-un solo core. El activador de V4 conectará ambos cargadores a la configuración del módulo.
+retorne. `core-count` acepta el rango arquitectónico completo 1..64: el host crea un vCPU por core
+y el kernel guest decide qué se ejecuta en cada uno. El activador de V4 conectará ambos cargadores a
+la configuración del módulo.
 
 ## Límites actuales
 
 - El espacio de direcciones es de 32 bits (máximo arquitectónico 4 GiB); la RAM física configurable
   de ADR-037 es 16 MiB–1 GiB.
 - No acepta el `.flow` de `iflow-16`; esa línea pertenece a ese módulo.
-- V3 sigue abierta: faltan el kernel guest con scheduler y TLB shootdown, la persistencia entre
-  mensajes y el cierre del multinúcleo. V3-1 cubre reloj, quantum de preempción, watchdog de paso
-  configurable y sleep/wake. V3-2 ya entrega `CoreCountConfig`, `COREID` (`0x10A`, RO),
-  `SYSINFO.CORE_COUNT`, `FEATURES` bit 6 y las atómicas `LR.W`/`SC.W`/`AMOADD.W`/`AMOSWAP.W`/
-  `AMOAND.W`/`AMOOR.W` con reserva por core, invalidación por trap y rechazo de MMIO. También
-  entrega el PIC con banco por core, `SOFT_IRQ` con línea/destino (IPI y broadcast) y `TARGET` en
-  `TIMER` y `HOST_MAILBOX`; un destino fuera de `CORE_COUNT` es `BUS_ERROR`. `MachineMemory`
-  comparte RAM, MMIO, PIC y reservas atómicas, `CoreMemory` separa CSR, MMU, TLB y reserva por
-  core, y `MachineRuntime` crea CPU, quantum y watchdog por core. Las palabras alineadas de 32 bits
-  se leen y escriben sin tearing sobre frames concurrentes; los dispositivos MMIO mutables
-  serializan sus transacciones entre cores. Un cambio de page table no vacía
-  la TLB ajena: el core destino debe ejecutar `SFENCE.VMA` tras la IPI; no hay shootdown automático
-  del host. El journal concurrente por unidad de mensaje está implementado con overlay aislado,
-  read-your-writes y commit solo en `DELIVER`. V3-2a entrega el ensamblador `.flowasm` v3
-  (`tools/iflow-compiler/src/v3`, formato `iflow-32` de `iflow-as`): secciones tipadas, directivas, encoder
-  completo, ROM `FLOWROM` v3 y `PRG3`; `RomParser` acepta la ROM emitida y `InstructionDecoder`
-  la decodifica. Faltan el kernel guest que complete scheduler y shootdown, el loader del host
-  que copie los segmentos a su `loadAddress` y la persistencia entre mensajes. Hasta completar
-  V3-2, `CORE_COUNT > 1` falla explícito.
+- V3 sigue abierta: falta la persistencia entre mensajes. V3-1 cubre reloj, quantum de preempción,
+  watchdog de paso configurable y sleep/wake. V3-2 está completado: `CoreCountConfig`, `COREID`
+  (`0x10A`, RO), `SYSINFO.CORE_COUNT`, `FEATURES` bit 6 y las atómicas `LR.W`/`SC.W`/`AMOADD.W`/
+  `AMOSWAP.W`/`AMOAND.W`/`AMOOR.W` con reserva por core, invalidación por trap y rechazo de MMIO.
+  También entrega el PIC con banco por core, `SOFT_IRQ` con línea/destino (IPI y broadcast) y
+  `TARGET` en `TIMER` y `HOST_MAILBOX`; un destino fuera de `CORE_COUNT` es `BUS_ERROR`.
+  `MachineMemory` comparte RAM, MMIO, PIC y reservas atómicas, `CoreMemory` separa CSR, MMU, TLB y
+  reserva por core, y `MachineRuntime` crea CPU, quantum y watchdog por core. Las palabras alineadas
+  de 32 bits se leen y escriben sin tearing sobre frames concurrentes; los dispositivos MMIO
+  mutables serializan sus transacciones entre cores. Un cambio de page table no vacía la TLB ajena:
+  el core destino debe ejecutar `SFENCE.VMA` tras la IPI; no hay shootdown automático del host. El
+  journal concurrente por unidad de mensaje está implementado con overlay aislado, read-your-writes
+  y commit solo en `DELIVER`. El backend `.flowasm` v3 (`tools/iflow-compiler/src/v3`, formato
+  `iflow-32` de `iflow-as`) entrega secciones tipadas, directivas, encoder completo, ROM `FLOWROM`
+  v3 y `PRG3`; `RomParser` acepta la ROM emitida y `InstructionDecoder` la decodifica. El kernel
+  guest valida el scheduler con cola `AMOADD.W`, la IPI broadcast de línea 16, `SFENCE.VMA` y el
+  TLB shootdown, y los secundarios esperan la liberación con `HALT` y una IPI. Falta la
+  persistencia entre mensajes. `CORE_COUNT` 1..64 está habilitado.
 - Todavía no está cableado al hub ni tiene `ModuleActivator` propio. El motor v2
   (`VmPolicyEngine`/`VmConfigLoader`/`Iflow16Activator`) no forma parte de esta línea.

@@ -2411,8 +2411,7 @@ leer-modificar-escribir atómico y devuelven el valor anterior en `rd`; `rs` es 
 exigen alineación a 4 y `size = 10`; otra forma, tamaño o dirección produce
 `ILLEGAL_INSTRUCTION`, `ALIGNMENT` o `BUS_ERROR`. Solo operan sobre RAM; un `LR.W`/`SC.W`/`AMO*`
 sobre MMIO es `BUS_ERROR`. `rd` y `rs` pueden coincidir: el operando se lee antes de escribir el
-resultado. Sin esta extensión implementada, `CORE_COUNT > 1` falla explícitamente; no se simula
-multinúcleo con un solo hilo.
+resultado. La extensión está implementada: `CORE_COUNT > 1` no se simula con un solo hilo.
 
 Privilegios de instrucción: `CSR*`, `ERET`, `SFENCE.VMA` y `HALT` son solo `S`; `ECALL`, `HOST`,
 `RDCYCLE`, `RDTIME`, `FENCE`, `LR.W`, `SC.W`, `AMO*` y `BREAK` son `U/S`; el resto es común. Una
@@ -2640,13 +2639,12 @@ handle válido o 0xFFFF_FFFF. `FLAGS` solo escribe los bits 0–3.
    antes del commit. El host serializa las mutaciones globales o los servicios no thread-safe, pero
    no toma un `machineLock` global para ejecutar guest. El aborto de una unidad no revierte
    unidades ya confirmadas por otros cores.
-10. **Arranque y gate.** El BIOS y el kernel deben ser multicore-safe; si no lo son, `N > 1` no se
-    habilita. La implementación de este apartado es **V3-2** y debe entregar, como mínimo:
-    `CORE_COUNT`, estado por core, `COREID`/`SYSINFO`, atómicas, IPI, PIC por core, TLB shootdown,
-    scheduler de guest, watchdog por core y journal concurrente. Hasta que todo eso exista,
-    `CORE_COUNT > 1` falla explícitamente (`UNSUPPORTED`/`RESTART_REQUIRED`); no hay un modo
-    single-core silencioso ni un fallback. `CORE_COUNT = 1` debe seguir siendo determinista y es el
-    único modo soportado por V1/V2/V3-1.
+10. **Arranque y gate.** El BIOS y el kernel deben ser multicore-safe. La implementación de este
+    apartado corresponde a **V3-2** y entrega: `CORE_COUNT`, estado por core, `COREID`/`SYSINFO`,
+    atómicas, IPI, PIC por core, TLB shootdown, scheduler de guest, watchdog por core y journal
+    concurrente. `CORE_COUNT > 1` solo se habilita cuando el BIOS y el kernel guest cumplen ese
+    mínimo; no hay un modo single-core silencioso ni un fallback. `CORE_COUNT = 1` debe seguir
+    siendo determinista.
 
 ### 7. ABI `HOST` v3
 
@@ -2924,8 +2922,8 @@ Las preguntas 26 y 35–38 ya estaban cerradas en §5.4 y ADR-031; este ADR no l
   mensaje es política del kernel/userspace guest, no un fallo del host.
 - La enmienda de multinúcleo convierte `iflow-32` en **una VM con N vCPU configurables**, no en
   una colección de VMs. Exige estado por core, atómicas, IPI, TLB shootdown, MMIO/PIC seguro,
-  scheduler de guest, watchdog por core y journal concurrente; hasta V3-2, `CORE_COUNT > 1` falla
-  explícito. `iflow-16` conserva un único vCPU por diseño y no hereda esta decisión.
+  scheduler de guest, watchdog por core y journal concurrente; V3-2 entrega esas piezas y habilita
+  `CORE_COUNT > 1`. `iflow-16` conserva un único vCPU por diseño y no hereda esta decisión.
 - El contrato de política de ADR-031 se conserva: default deny, `DELIVER` explícito, una sola
   decisión, `CANCEL_EVENT` separado, TLV, read-your-writes, sin `REDIRECT`/`RATE_LIMIT`. El cambio
   de canal sigue siendo `textformatter.channel.set` por `SYNC_INVOKE`, no un import dedicado.

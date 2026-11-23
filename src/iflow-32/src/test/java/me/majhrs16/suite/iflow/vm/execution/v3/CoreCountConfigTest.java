@@ -1,7 +1,9 @@
 package me.majhrs16.suite.iflow.vm.execution.v3;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -54,11 +56,23 @@ class CoreCountConfigTest {
     }
 
     @Test
-    void rejectsMulticoreUntilV32IsComplete() throws IOException {
+    void loadsTheFullMulticoreRange() throws IOException {
         write("config-version: 1.0\ncore-count: 2\n");
+        CoreCountConfig two = CoreCountConfig.load(configDir);
+        assertEquals(2, two.coreCount());
+        assertTrue(two.multicore());
 
-        assertThrows(UnsupportedOperationException.class,
-                () -> CoreCountConfig.load(configDir));
+        write("config-version: 1.0\ncore-count: 64\n");
+        CoreCountConfig max = CoreCountConfig.load(configDir);
+        assertEquals(64, max.coreCount());
+        assertTrue(max.multicore());
+    }
+
+    @Test
+    void singleCoreIsNotMulticore() throws IOException {
+        write("config-version: 1.0\ncore-count: 1\n");
+
+        assertFalse(CoreCountConfig.load(configDir).multicore());
     }
 
     @Test
