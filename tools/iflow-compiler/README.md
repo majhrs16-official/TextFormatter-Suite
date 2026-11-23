@@ -264,13 +264,20 @@ supervisor, y rechaza `W && X`.
 | `.word <expr>...` | Palabras little-endian de 32 bits. |
 | `.string "texto"...` | UTF-8 terminado en NUL por cada argumento. |
 | `.space <n>` | Reserva `n` bytes a cero. |
+| `.data` | Inicia los datos inicializados de un `PROGRAM`; alinea a página. |
+| `.bss` | Inicia el espacio zero-filled de un `PROGRAM`; no emite bytes. |
 | `.capability "nombre"` | Capacidad de un `PROGRAM` (máx. 128 B, máx. 256). |
 | `.flags R\|W\|X\|U` | Sobrescribe los flags del segmento. |
 | `.globl <label>` | Marcador de símbolo global; no cambia la emisión. |
 
 `PROGRAM` se envuelve en la subcabecera `PRG3` de 32 bytes. El código empieza en
-`org + 32`; las capacidades van tras el código y la TOC apunta al `entryPoint`
-absoluto dentro del rango de código.
+`org + 32`; la TOC apunta al `entryPoint` absoluto dentro del rango de código.
+Un `PROGRAM` puede declarar `.data` y `.bss` en ese orden: `.data` alinea el
+final del código a página y emite los datos inicializados, `.bss` reserva el
+espacio zero-filled posterior a las capacidades. El loader copia el segmento y
+zero-fill desde `size` hasta `memSize`; por eso los datos y el bss nunca
+comparten página con el código R/X. Inicializar el bss con `.byte`, `.half`,
+`.word` o `.string` es un error explícito.
 
 ### Instrucciones y operandos
 

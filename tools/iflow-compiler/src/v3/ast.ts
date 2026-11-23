@@ -54,7 +54,9 @@ export type DirectiveName =
   | 'space'
   | 'capability'
   | 'flags'
-  | 'globl';
+  | 'globl'
+  | 'data'
+  | 'bss';
 
 export interface DirectiveStatement extends SourceLocation {
   readonly kind: 'directive';

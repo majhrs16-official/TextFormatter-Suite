@@ -29,6 +29,8 @@ const DIRECTIVES = new Set<DirectiveName>([
   'capability',
   'flags',
   'globl',
+  'data',
+  'bss',
 ]);
 
 const REGISTER_ALIASES: Readonly<Record<string, number>> = Object.freeze({

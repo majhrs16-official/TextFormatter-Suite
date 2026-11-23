@@ -253,6 +253,66 @@ main:
   assert.strictEqual(u32(bytes, 24), 2 + 2 + Buffer.byteLength('iflow.property.read'));
 });
 
+test('emits PRG3 data and bss ranges without mixing them with code', () => {
+  const result = bytesOf(minimalRom(`
+.section .program.main
+.org 0x02000000
+.entry main
+.capability "iflow.property.read"
+main:
+  NOP
+  .align 4096
+.data
+value:
+  .word 0x11223344
+.bss
+.align 4
+buffer:
+  .space 8
+`));
+  const program = result.segments.find(s => s.type === 4);
+  assert.ok(program);
+  const bytes = Buffer.from(program.bytes);
+  assert.strictEqual(u32(bytes, 4), 32);
+  assert.strictEqual(u32(bytes, 8), 0x1000);
+  assert.strictEqual(u32(bytes, 12), 0x1000);
+  assert.strictEqual(u32(bytes, 16), 0x1004);
+  assert.strictEqual(u32(bytes, 20),
+    bytes.length - (2 + 2 + Buffer.byteLength('iflow.property.read')));
+  assert.strictEqual(u32(bytes, 24), 2 + 2 + Buffer.byteLength('iflow.property.read'));
+  assert.deepStrictEqual([...bytes.subarray(0x1000, 0x1004)], [0x44, 0x33, 0x22, 0x11]);
+
+  const value = result.symbols.find(s => s.name === 'value');
+  const buffer = result.symbols.find(s => s.name === 'buffer');
+  assert.strictEqual(value.address, 0x02001000);
+  assert.strictEqual(buffer.address, 0x02000000 + 0x101c);
+  assert.strictEqual(program.memSize, bytes.length + 9,
+    'memSize extends past the file with the bss tail');
+});
+
+test('rejects invalid data and bss placement', () => {
+  assert.throws(() => bytesOf(minimalRom('\n.data\n')),
+    error => error instanceof AssemblyError && /only valid in a program/.test(error.message));
+
+  const program = body => `
+.section .program.main
+.org 0x02000000
+.entry main
+main:
+  NOP
+${body}`;
+  assert.throws(() => bytesOf(minimalRom(program('.align 4096\n.data\n'))),
+    error => error instanceof AssemblyError && /without data/.test(error.message));
+  assert.throws(() => bytesOf(minimalRom(program('.align 4096\n.bss\n'))),
+    error => error instanceof AssemblyError && /without space/.test(error.message));
+  assert.throws(() => bytesOf(minimalRom(program('.align 4096\n.bss\n.word 1\n'))),
+    error => error instanceof AssemblyError && /cannot initialize/.test(error.message));
+  assert.throws(() => bytesOf(minimalRom(program('.align 4096\n.data\nNOP\n'))),
+    error => error instanceof AssemblyError && /outside the code region/.test(error.message));
+  assert.throws(() => bytesOf(minimalRom(program('.align 4096\n.data\n.byte 1\n.data\n'))),
+    error => error instanceof AssemblyError && /before .bss/.test(error.message));
+});
+
 test('rejects a ROM without the required KERNEL segment', () => {
   assert.throws(() => bytesOf(`
 .section .bios

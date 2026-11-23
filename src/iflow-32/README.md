@@ -11,8 +11,10 @@
 > `.flow` real decide por `message.content` y el hub obtiene un `RouteOutcome`); kernel persistente
 > completado (arranque único, mailbox `TYPE_MESSAGE` + IRQ 5, `MIDENT` por unidad y retorno a
 > `HALT` tras el `ECALL`); aislamiento por unidad completado (el kernel recopia el segmento,
-> hace zero-fill hasta `memSize` y limpia la página de pila antes de cada unidad). Falta el
-> resto de V4: varios programas y load addresses arbitrarias.
+> hace zero-fill hasta `memSize` y limpia la página de pila antes de cada unidad); datos/bss
+> reales completados (el ensamblador v3 emite `.data`/`.bss` en `PRG3` y la política verifica
+> que los datos vuelven de la ROM y el bss se zeroa en cada unidad). Falta el resto de V4:
+> varios programas y load addresses arbitrarias.
 >
 > Este módulo implementa el contrato de ADR-037: ISA v3 de 32 bits, MMU paginada, bus MMIO,
 > dispositivos, PIC/timer y ABI `HOST` v3. No comparte núcleo, decoder, MMU, formato ROM ni ABI con
@@ -146,7 +148,11 @@ explícito. No hay política por defecto ni ROM embebida.
   datos/bss y pila `R/W/U` (sin `W && X` por página) y entra en U con `PIDENT` 0 y el `MIDENT`
   que el kernel toma del handle del mailbox.
   Los datos y el bss deben empezar en páginas posteriores al código; si comparten la última
-  página de código, el loader falla con `BAD0000A` en vez de degradar `W^X`.
+  página de código, el loader falla con `BAD0000A` en vez de degradar `W^X`. El ensamblador v3
+  emite esos rangos con las directivas `.data` y `.bss`: `.data` alinea el final del código a
+  página y emite los datos inicializados, y `.bss` reserva el espacio zero-filled posterior a
+  las capacidades y no ocupa bytes en la ROM. La política de fixture usa ambos rangos y falla
+  con `ERROR` si una unidad hereda el marcador del bss o pierde el dato inicializado.
   El programa llama a `HOST` para leer propiedades y emitir `ROUTE_DECISION`; la decisión vive en
   el journal del mensaje y solo se aplica al bridge cuando el host hace `commitExecution`.
   El host sigue siendo el único que verifica SHA-256 y nombres de capacidad (`RomParser`); el

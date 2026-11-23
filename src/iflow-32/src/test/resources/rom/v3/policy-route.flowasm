@@ -743,6 +743,21 @@ program_start:
     JNE stale_state
     MOV R8, 0xDEADBEEF
     MOV [R9], R8
+
+    ; Los datos inicializados deben volver de la ROM en cada unidad y el bss
+    ; debe quedar a cero. Escribir el marcador del bss delata un reset roto.
+    MOV R1, unit_marker
+    MOV R2, [R1]
+    MOV R3, 0x5A5A
+    CMP R2, R3
+    JNE bad_data_state
+    MOV R1, scratch_marker
+    MOV R2, [R1]
+    CMP R2, 0
+    JNE bad_bss_state
+    MOV R2, 0xDEADBEEF
+    MOV [R1], R2
+
     MOV R2, read_args
     MOV R3, 52
     MOV R4, 0x02600800
@@ -784,10 +799,22 @@ blocked:
 read_failed:
     MOV R2, decision_error
     MOV R3, 50
+    JMP decide
 
 stale_state:
     MOV R2, decision_error
     MOV R3, 50
+    JMP decide
+
+bad_data_state:
+    MOV R2, decision_error
+    MOV R3, 50
+    JMP decide
+
+bad_bss_state:
+    MOV R2, decision_error
+    MOV R3, 50
+    JMP decide
 
 decide:
     MOV R4, 0
@@ -869,6 +896,15 @@ decision_error:
     .word 5
     .byte 101, 114, 114, 111, 114
 
-; El codigo termina en una pagina exacta: el bss (memSize > codeEnd) empieza
-; en la pagina siguiente y se mapea R/W, sin compartir pagina con codigo R/X.
+; El codigo termina en una pagina exacta: los datos y el bss empiezan en la
+; pagina siguiente y se mapean R/W, sin compartir pagina con codigo R/X.
 .align 4096
+
+.data
+unit_marker:
+    .word 0x5A5A
+
+.bss
+.align 4
+scratch_marker:
+    .space 4

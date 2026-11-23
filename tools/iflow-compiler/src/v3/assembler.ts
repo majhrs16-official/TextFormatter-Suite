@@ -63,6 +63,8 @@ const DEFAULT_FLAGS: Readonly<Record<SectionType, number>> = {
   [SectionType.CONFIG]: SEGMENT_FLAGS.R,
 };
 
+type SectionPhase = 'code' | 'data' | 'bss';
+
 interface SectionBuilder {
   readonly name: string;
   readonly type: SectionType;
@@ -70,9 +72,17 @@ interface SectionBuilder {
   flags: number;
   entryName?: string;
   capabilities: string[];
+  capabilitiesLength: number;
   statements: Statement[];
   location: number;
   size: number;
+  memSize: number;
+  phase: SectionPhase;
+  codeLength: number;
+  dataLength: number;
+  dataStart: number;
+  bssSize: number;
+  bssStart: number;
 }
 
 interface SegmentLayout {
@@ -86,6 +96,7 @@ export class AssemblerV3 {
   private readonly diagnostics: Diagnostic[] = [];
   private readonly labels = new Map<string, SymbolInfo>();
   private readonly sections: SectionBuilder[] = [];
+  private readonly capabilityLengths = new Map<string, number>();
   private resetName?: string;
   private resetVector = 0;
   private defaultBiosOrg = PAGE_SIZE;
@@ -96,12 +107,14 @@ export class AssemblerV3 {
     this.diagnostics.length = 0;
     this.labels.clear();
     this.sections.length = 0;
+    this.capabilityLengths.clear();
     this.resetName = undefined;
     this.resetVector = 0;
     this.defaultBiosOrg = PAGE_SIZE;
     const parsed = parseSource(source, file, this.diagnostics);
     this.sourceFile = file;
     this.sourceStatements = parsed.statements;
+    this.collectCapabilityLengths(parsed.statements);
     const sectionCount = parsed.statements.filter(statement => statement.kind === 'directive'
       && statement.name === 'section').length;
     this.defaultBiosOrg = align(HEADER_SIZE + sectionCount * TOC_ENTRY_SIZE, PAGE_SIZE);
@@ -168,6 +181,11 @@ export class AssemblerV3 {
         this.error(statement, `instruction outside a section: ${statement.mnemonic}`);
         continue;
       }
+      if (current.phase !== 'code') {
+        this.error(statement,
+          `instruction outside the code region of '${current.name}'`);
+        continue;
+      }
       current.statements.push(statement);
       const plan = classifyInstruction(statement, (message, line, column) =>
         this.errorAt(message, line, column));
@@ -179,11 +197,74 @@ export class AssemblerV3 {
     }
 
     for (const section of this.sections) {
-      section.size = section.location - this.startOf(section);
+      this.finishSection(section);
       if (section.entryName !== undefined && !this.labels.has(section.entryName)) {
         this.errorAt(`undefined entry label '${section.entryName}'`, 1, 1);
       }
     }
+  }
+
+  private collectCapabilityLengths(statements: readonly Statement[]): void {
+    let section: string | undefined;
+    for (const statement of statements) {
+      if (statement.kind !== 'directive') {
+        continue;
+      }
+      if (statement.name === 'section') {
+        section = statement.textArguments[0];
+        if (section !== undefined) {
+          this.capabilityLengths.set(section, 2);
+        }
+        continue;
+      }
+      if (statement.name !== 'capability' || section === undefined) {
+        continue;
+      }
+      let length = this.capabilityLengths.get(section) ?? 2;
+      for (const text of statement.textArguments) {
+        length += 2 + Buffer.byteLength(text, 'utf8');
+      }
+      this.capabilityLengths.set(section, length);
+    }
+  }
+
+  private finishSection(section: SectionBuilder): void {
+    const start = this.startOf(section);
+    if (section.type !== SectionType.PROGRAM) {
+      section.size = section.location - start;
+      section.memSize = section.size;
+      section.codeLength = section.size;
+      return;
+    }
+
+    if (section.phase === 'code') {
+      section.codeLength = section.location - start;
+    } else if (section.phase === 'data') {
+      section.dataLength = section.location - section.dataStart;
+    } else {
+      section.bssSize = section.location - section.bssStart;
+    }
+
+    if (section.codeLength <= 0) {
+      this.errorAt(`PROGRAM '${section.name}' has an empty code region`, 1, 1);
+    }
+    if (section.phase === 'data' && section.dataLength === 0) {
+      this.errorAt(`PROGRAM '${section.name}' declares .data without data`, 1, 1);
+    }
+    if (section.phase === 'bss' && section.bssSize === 0) {
+      this.errorAt(`PROGRAM '${section.name}' declares .bss without space`, 1, 1);
+    }
+    if (section.dataLength > 0 || section.bssSize > 0) {
+      const codeEnd = section.org + PRG3_SIZE + section.codeLength;
+      if ((codeEnd & (PAGE_SIZE - 1)) !== 0) {
+        this.errorAt(
+          `PROGRAM '${section.name}' data/bss must start on a page after code`, 1, 1);
+      }
+    }
+
+    section.size = section.codeLength + section.dataLength;
+    section.memSize = PRG3_SIZE + section.size + section.capabilitiesLength
+      + section.bssSize;
   }
 
   private openSection(statement: DirectiveStatement): SectionBuilder | undefined {
@@ -209,16 +290,37 @@ export class AssemblerV3 {
       org,
       flags: DEFAULT_FLAGS[type],
       capabilities: [],
+      capabilitiesLength: this.capabilityLengths.get(rawName) ?? 2,
       statements: [],
       location: type === SectionType.PROGRAM ? org + PRG3_SIZE : org,
       size: 0,
+      memSize: 0,
+      phase: 'code',
+      codeLength: 0,
+      dataLength: 0,
+      dataStart: 0,
+      bssSize: 0,
+      bssStart: 0,
     };
     this.sections.push(section);
     return section;
   }
 
   private layoutDirective(statement: DirectiveStatement, section: SectionBuilder): void {
+    if (section.phase === 'bss'
+        && (statement.name === 'byte'
+          || statement.name === 'half'
+          || statement.name === 'word'
+          || statement.name === 'string')) {
+      this.error(statement, `.bss only reserves zero-filled space; .${statement.name} `
+        + 'cannot initialize it');
+      return;
+    }
     switch (statement.name) {
+      case 'data':
+      case 'bss':
+        this.layoutRegionDirective(statement, section);
+        break;
       case 'org': {
         if (section.statements.length > 0 || section.location !== this.startOf(section)) {
           this.error(statement, '.org must appear before section content');
@@ -297,6 +399,51 @@ export class AssemblerV3 {
     }
   }
 
+  private layoutRegionDirective(
+    statement: DirectiveStatement,
+    section: SectionBuilder,
+  ): void {
+    if (section.type !== SectionType.PROGRAM) {
+      this.error(statement, `.${statement.name} is only valid in a program section`);
+      return;
+    }
+    if (statement.name === 'data') {
+      if (section.phase !== 'code') {
+        this.error(statement, '.data must appear once, before .bss');
+        return;
+      }
+      const aligned = align(section.location, PAGE_SIZE);
+      section.codeLength = aligned - this.startOf(section);
+      section.location = aligned;
+      section.dataStart = aligned;
+      section.phase = 'data';
+      return;
+    }
+
+    if (section.phase === 'bss') {
+      this.error(statement, '.bss must appear only once');
+      return;
+    }
+    if (section.phase === 'code') {
+      const aligned = align(section.location, PAGE_SIZE);
+      section.codeLength = aligned - this.startOf(section);
+      section.location = aligned;
+      section.dataLength = 0;
+    } else {
+      section.dataLength = section.location - section.dataStart;
+      if (section.dataLength === 0) {
+        this.error(statement, '.data requires initialized data before .bss');
+        return;
+      }
+    }
+
+    const segmentStart = this.startOf(section);
+    section.bssStart = segmentStart + section.codeLength
+      + section.dataLength + section.capabilitiesLength;
+    section.location = section.bssStart;
+    section.phase = 'bss';
+  }
+
   private emitDirective(
     statement: DirectiveStatement,
     section: SectionBuilder,
@@ -370,6 +517,8 @@ export class AssemblerV3 {
       case 'capability':
       case 'flags':
       case 'globl':
+      case 'data':
+      case 'bss':
         return 0;
     }
   }
@@ -384,7 +533,7 @@ export class AssemblerV3 {
       return {
         section,
         bytes: content,
-        memSize: content.length,
+        memSize: isProgram ? section.memSize : content.length,
         entryPoint: isExecutable(section.flags) ? entry : 0,
       };
     });
@@ -393,10 +542,12 @@ export class AssemblerV3 {
   private emitSectionBytes(section: SectionBuilder): Uint8Array {
     const result = new Uint8Array(Math.max(0, section.size));
     let current: SectionBuilder | undefined;
+    let phase: SectionPhase = 'code';
     let offset = 0;
     for (const statement of this.allStatements()) {
       if (statement.kind === 'directive' && statement.name === 'section') {
         current = this.sections.find(value => value.name === statement.textArguments[0]);
+        phase = 'code';
         offset = 0;
         continue;
       }
@@ -407,8 +558,19 @@ export class AssemblerV3 {
         continue;
       }
       if (statement.kind === 'directive') {
+        if (statement.name === 'bss') {
+          break;
+        }
+        if (statement.name === 'data') {
+          phase = 'data';
+          offset = section.codeLength;
+          continue;
+        }
         const written = this.emitDirective(statement, section, result, offset);
         offset += written;
+        continue;
+      }
+      if (phase !== 'code') {
         continue;
       }
       const plan = classifyInstruction(statement, (message, line, column) =>
@@ -461,17 +623,29 @@ export class AssemblerV3 {
       capabilities.push(item);
       capabilitiesLength += item.length;
     }
-    const content = new Uint8Array(PRG3_SIZE + code.length + capabilitiesLength);
+    if (capabilitiesLength !== section.capabilitiesLength) {
+      this.errorAt(
+        `section '${section.name}' capability length changed during emission`, 1, 1);
+    }
+    if (code.length !== section.codeLength + section.dataLength) {
+      this.errorAt(
+        `section '${section.name}' size changed during emission`, 1, 1);
+    }
+    const codeEnd = PRG3_SIZE + section.codeLength;
+    const dataOffset = section.dataLength > 0 ? codeEnd : 0;
+    const dataEnd = section.dataLength > 0 ? codeEnd + section.dataLength : 0;
+    const capabilitiesOffset = PRG3_SIZE + code.length;
+    const content = new Uint8Array(capabilitiesOffset + capabilitiesLength);
     content.set(Buffer.from('PRG3', 'ascii'), 0);
     writeU32(content, 4, PRG3_SIZE);
-    writeU32(content, 8, PRG3_SIZE + code.length);
-    writeU32(content, 12, 0);
-    writeU32(content, 16, 0);
-    writeU32(content, 20, PRG3_SIZE + code.length);
+    writeU32(content, 8, codeEnd);
+    writeU32(content, 12, dataOffset);
+    writeU32(content, 16, dataEnd);
+    writeU32(content, 20, capabilitiesOffset);
     writeU32(content, 24, capabilitiesLength);
     writeU32(content, 28, 0);
     content.set(code, PRG3_SIZE);
-    let offset = PRG3_SIZE + code.length;
+    let offset = capabilitiesOffset;
     writeU16(content, offset, capabilities.length);
     offset += 2;
     for (const capability of capabilities) {
@@ -599,8 +773,8 @@ export class AssemblerV3 {
       for (let j = i + 1; j < this.sections.length; j += 1) {
         const a = this.sections[i];
         const b = this.sections[j];
-        const aSize = Math.max(a.size + (a.type === SectionType.PROGRAM ? PRG3_SIZE : 0), 1);
-        const bSize = Math.max(b.size + (b.type === SectionType.PROGRAM ? PRG3_SIZE : 0), 1);
+        const aSize = Math.max(a.memSize, 1);
+        const bSize = Math.max(b.memSize, 1);
         if (overlaps(a.org, aSize, b.org, bSize)) {
           this.errorAt(
             `sections '${a.name}' and '${b.name}' overlap in virtual memory`, 1, 1);
@@ -611,7 +785,7 @@ export class AssemblerV3 {
 
   private validateSectionRules(section: SectionBuilder): void {
     const start = section.org;
-    const size = section.size + (section.type === SectionType.PROGRAM ? PRG3_SIZE : 0);
+    const size = section.memSize;
     const end = start + size;
     const readable = (section.flags & SEGMENT_FLAGS.R) !== 0;
     const writable = (section.flags & SEGMENT_FLAGS.W) !== 0;
