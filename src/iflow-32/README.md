@@ -6,8 +6,8 @@
 > mensaje, backend `.flowasm` v3 `iflow-as -f iflow-32` con ROM `FLOWROM` v3/`PRG3` y kernel guest
 > con scheduler, IPI y TLB shootdown); V3-3 completado (snapshot COW, apagado y reinicio en
 > frío con NVRAM persistente); V4 loader slice completado (el kernel guest carga el `PROGRAM`,
-> mapea `W^X`, entra en modo usuario y ejecuta `HOST`). Falta el resto de V4: varios programas,
-> load addresses arbitrarias y la integración con el hub.
+> mapea `W^X`, entra en modo usuario y ejecuta `HOST MESSAGE_ID` y `HOST ROUTE_DECISION`). Falta
+> el resto de V4: varios programas, load addresses arbitrarias y la integración con el hub.
 >
 > Este módulo implementa el contrato de ADR-037: ISA v3 de 32 bits, MMU paginada, bus MMIO,
 > dispositivos, PIC/timer y ABI `HOST` v3. No comparte núcleo, decoder, MMU, formato ROM ni ABI con
@@ -116,6 +116,10 @@ la configuración del módulo.
   `memSize <= 64 KiB` y datos alineados a página después del código. Valida magic/estructura
   `PRG3`, copia el segmento a `0x02800000`, zero-fill hasta `memSize`, mapea código `R/X/U`,
   datos/bss y pila `R/W/U` (sin `W && X` por página) y entra en U con `PIDENT` 0 y `MIDENT` 1.
+  Los datos y el bss deben empezar en páginas posteriores al código; si comparten la última
+  página de código, el loader falla con `BAD0000A` en vez de degradar `W^X`.
+  El programa llama a `HOST MESSAGE_ID` y a `HOST ROUTE_DECISION` (`DELIVER`); la decisión vive
+  en el journal del mensaje y solo se aplica al bridge cuando el host hace `commitExecution`.
   El host sigue siendo el único que verifica SHA-256 y nombres de capacidad (`RomParser`); el
   guest revalida los rangos que consume. Más de un programa, otra `loadAddress`, `memSize`
   mayor o datos que compartan página con código fallan con un marcador `BADxxxxxx` explícito,

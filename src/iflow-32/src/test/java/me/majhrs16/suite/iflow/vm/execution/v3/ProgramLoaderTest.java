@@ -2,6 +2,7 @@ package me.majhrs16.suite.iflow.vm.execution.v3;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -54,36 +55,37 @@ class ProgramLoaderTest {
     private static final int KERNEL_READY = SCRATCH + 0x44;
     private static final int PROGRAM_LOADED = SCRATCH + 0xA0;
     private static final int PROGRAM_DONE = SCRATCH + 0xA4;
-    private static final int HOST_STATUS = SCRATCH + 0xA8;
-    private static final int HOST_LENGTH = SCRATCH + 0xAC;
+    private static final int LAST_HOST_STATUS = SCRATCH + 0xA8;
+    private static final int LAST_HOST_LENGTH = SCRATCH + 0xAC;
     private static final int PROGRAM_PAGES = SCRATCH + 0xB0;
 
     private static final int ALIAS = 0x0280_0000;
     private static final int STACK_PHYSICAL = 0x0290_0000;
     private static final int USER_TABLE = 0x0200_7000;
     private static final int PROGRAM_PTE = USER_TABLE + 0x0400;
+    private static final int BSS_PTE = USER_TABLE + 0x0404;
     private static final int STACK_PTE = USER_TABLE + 0x0800;
     private static final int PROGRAM_PAGE_FLAGS = 0x35;
     private static final int DATA_PAGE_FLAGS = 0x2D;
 
     private static final int BOOT_MARKER_VALUE = 0x600D_0001;
     private static final int ECALL_USER_VECTOR = 7;
-    private static final int PATCHED_MEM_SIZE = 0x200;
-    private static final int PROGRAM_SEGMENT_SIZE = 128;
+    private static final int PATCHED_MEM_SIZE = 0x2000;
     private static final int MAX_MEM_SIZE_MARKER = 0xBAD0_0006;
     private static final int MAX_ROUNDS = 2_000;
 
     @Test
-    void loadsProgramRunsHostAndHaltsOnUserEcall() {
+    void loadsProgramRunsHostAndHaltsOnUserEcall() throws Exception {
         byte[] bytes = fixture();
-        patchProgramMemSize(bytes, PATCHED_MEM_SIZE);
+        int segmentSize = patchProgramMemSize(bytes, PATCHED_MEM_SIZE);
         RomImage image = RomParser.parse(bytes);
         VirtualClock clock = new VirtualClock();
         MachineMemory memory = MachineMemory.fromRom(
                 new CsrFile(0), image, MachineFixture.RAM_SIZE, clock, false, 1);
 
         // Garbage beyond size must be zeroed by the loader, not by the copy.
-        for (int offset = PROGRAM_SEGMENT_SIZE; offset < PATCHED_MEM_SIZE; offset += 4) {
+        int bssStart = (segmentSize + 3) & ~3;
+        for (int offset = bssStart; offset < PATCHED_MEM_SIZE; offset += 4) {
             memory.physical().writeWord(ALIAS + offset, 0xDEAD_BEEF);
         }
 
@@ -100,7 +102,7 @@ class ProgramLoaderTest {
                 System::nanoTime);
 
         runUntilHalted(runtime);
-        host.abortExecution(1);
+        host.commitExecution(1);
 
         assertEquals(BOOT_MARKER_VALUE, word(memory, BOOT_MARKER));
         assertEquals(1, word(memory, BOOT_READY));
@@ -109,20 +111,22 @@ class ProgramLoaderTest {
         assertEquals(1, word(memory, PROGRAM_DONE));
         assertEquals(0, word(memory, TRAP_MARKER));
         assertEquals(ECALL_USER_VECTOR, word(memory, TRAP_CAUSE));
-        assertEquals(1, word(memory, PROGRAM_PAGES));
+        assertEquals(2, word(memory, PROGRAM_PAGES));
 
-        // HOST returned OK and a TLV map with the message id.
-        assertEquals(0, word(memory, HOST_STATUS));
-        int length = word(memory, HOST_LENGTH);
-        assertTrue(length > 0, "HOST returned no result");
+        // MESSAGE_ID returned OK and a TLV map with the id.
         assertEquals(0, word(memory, STACK_PHYSICAL + 0x400));
-        assertEquals(length, word(memory, STACK_PHYSICAL + 0x404));
+        int length = word(memory, STACK_PHYSICAL + 0x404);
+        assertTrue(length > 0, "HOST returned no result");
         Map<String, TlvCodec.TlvValue> result = TlvCodec
                 .decode(bytes(memory, STACK_PHYSICAL + 0x800, length)).asMap();
         assertEquals("msg-loader-0001", result.get(HostAbi.KEY_ID).asString());
 
+        // The last HOST (ROUTE_DECISION) has no result payload.
+        assertEquals(0, word(memory, LAST_HOST_STATUS));
+        assertEquals(0, word(memory, LAST_HOST_LENGTH));
+
         // The loader zero-filled from size to memSize.
-        for (int offset = PROGRAM_SEGMENT_SIZE; offset < PATCHED_MEM_SIZE; offset += 4) {
+        for (int offset = bssStart; offset < PATCHED_MEM_SIZE; offset += 4) {
             assertEquals(0, word(memory, ALIAS + offset),
                     "nonzero bss at alias + 0x" + Integer.toHexString(offset));
         }
@@ -131,9 +135,19 @@ class ProgramLoaderTest {
         // hardware-maintained, so they are masked out of the comparison.
         int hardware = Mmu.PTE_A | Mmu.PTE_D;
         assertEquals(ALIAS | PROGRAM_PAGE_FLAGS, word(memory, PROGRAM_PTE) & ~hardware);
+        assertEquals(ALIAS + 0x1000 | DATA_PAGE_FLAGS, word(memory, BSS_PTE) & ~hardware);
         assertEquals(STACK_PHYSICAL | DATA_PAGE_FLAGS, word(memory, STACK_PTE) & ~hardware);
         assertFalse(bridge.messageIdRequested.isEmpty());
         assertEquals(List.of(1), bridge.messageIdRequested);
+
+        // ROUTE_DECISION latched in the journal and applied on commit.
+        assertEquals(0, word(memory, STACK_PHYSICAL + 0x408));
+        assertEquals(0, word(memory, STACK_PHYSICAL + 0x40C));
+        assertEquals(1, bridge.decisions);
+        assertEquals(HostAbi.TARGET_DELIVER, bridge.lastTarget);
+        assertEquals("loader", bridge.lastReason);
+        assertNull(bridge.lastError);
+        assertEquals(List.of(), bridge.appliedWrites);
     }
 
     @Test
@@ -191,18 +205,20 @@ class ProgramLoaderTest {
 
     /**
      * Raises the TOC {@code memSize} above {@code size} without touching the
-     * segment bytes. Only the ROM global hash changes.
+     * segment bytes. Only the ROM global hash changes. Returns the original
+     * segment size.
      */
-    private static void patchProgramMemSize(byte[] rom, int memSize) {
+    private static int patchProgramMemSize(byte[] rom, int memSize) {
         int toc = readU32(rom, 28);
         int count = readU16(rom, 32);
         for (int index = 0; index < count; index++) {
             int entry = toc + index * 64;
             if ((rom[entry] & 0xFF) == 4) {
+                int size = readU32(rom, entry + 8);
                 putU32(rom, entry + 20, memSize);
                 byte[] hash = sha256(rom);
                 System.arraycopy(hash, 0, rom, 48, 32);
-                return;
+                return size;
             }
         }
         throw new IllegalStateException("PROGRAM segment is missing");
@@ -249,8 +265,14 @@ class ProgramLoaderTest {
 
     private static final class FakeBridge implements HostBridge {
 
-        private final Set<String> capabilities = Set.of(HostAbi.CAP_MESSAGE_ID);
+        private final Set<String> capabilities = Set.of(
+                HostAbi.CAP_MESSAGE_ID, HostAbi.CAP_ROUTE_DECISION);
         private final List<Integer> messageIdRequested = new java.util.ArrayList<>();
+        private int decisions;
+        private int lastTarget;
+        private String lastReason;
+        private String lastError;
+        private List<PropertyWrite> appliedWrites = List.of();
 
         @Override
         public boolean verifyProgram(int pident) {
@@ -288,7 +310,7 @@ class ProgramLoaderTest {
 
         @Override
         public void applyPropertyWrites(List<PropertyWrite> writes) {
-            throw new UnsupportedOperationException("journal is not used");
+            appliedWrites = List.copyOf(writes);
         }
 
         @Override
@@ -305,7 +327,12 @@ class ProgramLoaderTest {
         @Override
         public void routeDecision(int pident, int mident, int target,
                                   String reason, String error) {
-            throw new UnsupportedOperationException("ROUTE_DECISION is not used");
+            assertEquals(0, pident);
+            assertEquals(1, mident);
+            decisions++;
+            lastTarget = target;
+            lastReason = reason;
+            lastError = error;
         }
 
         @Override

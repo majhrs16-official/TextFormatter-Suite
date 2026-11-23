@@ -28,7 +28,7 @@
 ;   0x0200E090 PRG3.dataOffset  0x0200E094 PRG3.dataEnd
 ;   0x0200E098 PRG3.capsOffset  0x0200E09C PRG3.capsLength
 ;   0x0200E0A0 program_loaded   0x0200E0A4 program_done
-;   0x0200E0A8 host_status      0x0200E0AC host_length
+;   0x0200E0A8 last_host_status 0x0200E0AC last_host_length
 ;   0x0200E0B0 program.pages
 ;
 ; Page tables:
@@ -45,11 +45,12 @@
 ;   0x02500000 virtual -> 0x02800000 fisico (codigo R/X/U, datos y bss R/W/U)
 ;   0x02600000 virtual -> 0x02900000 fisico (pila R/W/U)
 ;   0x02600400 host_status      0x02600404 host_length
+;   0x02600408 route_status     0x0260040C route_length
 ;   0x02600800 buffer de resultado HOST (64 bytes)
 ;
 ; El kernel acepta un unico PROGRAM en 0x02500000 con memSize <= 0x10000 y
-; datos alineados a pagina despues del codigo. Fuera de ese contrato falla con
-; un marcador BADxxxxxx explicito; no hay relocacion ni fallback.
+; datos y bss en paginas posteriores al codigo. Fuera de ese contrato falla
+; con un marcador BADxxxxxx explicito; no hay relocacion ni fallback.
 
 .section .bios
 .org 0x00001000
@@ -419,6 +420,15 @@ data_present:
     SHL R3, 12
     CMP R1, R3
     JAE bad_data
+    ; bss (memSize > codeEnd) exige codeEnd alineado a pagina para conservar W^X.
+    MOV R1, [R9 + 0xE080]
+    MOV R2, [R9 + 0xE08C]
+    CMP R1, R2
+    JLS data_checked
+    MOV R3, R2
+    AND R3, 0xFFF
+    JZ data_checked
+    JMP bad_data
 data_checked:
 
     ; Capacidades: blob dentro del segmento y tras codigo/datos.
@@ -448,7 +458,10 @@ caps_max_done:
     JAE bad_caps
     MOV R1, [R9 + 0xE070]
     ADD R1, R6
-    MOV.H R2, [R1]
+    MOV.B R2, [R1]
+    MOV.B R5, [R1 + 1]
+    SHL R5, 8
+    OR R2, R5
     ADD R1, 2
     MOV R3, R1
     ADD R3, R7
@@ -458,7 +471,10 @@ caps_loop:
     JZ caps_ok
     CMP R1, R3
     JB bad_caps
-    MOV.H R4, [R1]
+    MOV.B R4, [R1]
+    MOV.B R5, [R1 + 1]
+    SHL R5, 8
+    OR R4, R5
     CMP R4, 0
     JZ bad_caps
     CMP R4, 128
@@ -611,6 +627,7 @@ generic_trap:
 .org 0x02500000
 .entry program_start
 .capability iflow.message.id
+.capability iflow.route.decision
 
 program_start:
     MOV R2, 0
@@ -626,6 +643,40 @@ program_start:
     MOV [R6], R0
     MOV [R6 + 4], R1
 
+    ; ROUTE_DECISION(DELIVER, "loader") con el mapa TLV de abajo.
+    MOV R2, decision_tlv
+    MOV R3, 51
+    MOV R4, 0
+    MOV R5, 0
+    MOV R0, 0x0300
+    MOV R1, 0
+    HOST
+
+    MOV R6, 0x02600408
+    MOV [R6], R0
+    MOV [R6 + 4], R1
+
     ECALL
 program_hang:
     JMP program_hang
+
+; Mapa TLV {target:i64=0, reason:"loader"}: 46 bytes de payload + cabecera.
+decision_tlv:
+    .byte 6
+    .word 46
+    .byte 1
+    .word 6
+    .byte 116, 97, 114, 103, 101, 116
+    .byte 2
+    .word 8
+    .word 0, 0
+    .byte 1
+    .word 6
+    .byte 114, 101, 97, 115, 111, 110
+    .byte 1
+    .word 6
+    .byte 108, 111, 97, 100, 101, 114
+
+; El codigo termina en una pagina exacta: el bss (memSize > codeEnd) empieza
+; en la pagina siguiente y se mapea R/W, sin compartir pagina con codigo R/X.
+.align 4096
