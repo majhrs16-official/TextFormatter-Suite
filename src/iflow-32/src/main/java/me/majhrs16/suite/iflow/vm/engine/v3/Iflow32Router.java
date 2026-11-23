@@ -33,6 +33,7 @@ import me.majhrs16.suite.iflow.vm.host.v3.HostServiceException;
 import me.majhrs16.suite.iflow.vm.host.v3.V3HostBridge;
 import me.majhrs16.suite.iflow.vm.isa.v3.CsrFile;
 import me.majhrs16.suite.iflow.vm.isa.v3.VirtualClock;
+import me.majhrs16.suite.iflow.vm.memory.v3.HostMailbox;
 import me.majhrs16.suite.iflow.vm.memory.v3.MachineMemory;
 import me.majhrs16.suite.iflow.vm.rom.RomImage;
 import me.majhrs16.suite.iflow.vm.rom.RomParser;
@@ -46,18 +47,21 @@ import me.majhrs16.suite.iflow.vm.rom.RomParser;
  * {@code HOST}. The guest returns one {@code ROUTE_DECISION}; the host applies
  * the committed journal and maps the ABI target to a {@link PolicyTarget}.</p>
  *
- * <p>Lifecycle of this slice: the guest kernel currently loads exactly one
- * {@code PROGRAM} and halts after its output. Therefore every message is a
- * complete boot: the router keeps one {@link MachineRuntime} and cold-resets it
- * between messages (NVRAM and nothing else survives). The mailbox-driven
- * persistent kernel, several programs and arbitrary load addresses are still
- * pending V4 work; there is no fake reuse and no second dispatch path.</p>
+ * <p>Lifecycle of this slice: the guest kernel loads exactly one
+ * {@code PROGRAM} during boot and then idles in {@code HALT}. Every message is
+ * published through the host mailbox ({@code TYPE_MESSAGE} + IRQ 5); the kernel
+ * reads the handle, assigns it as {@code MIDENT}, enters user mode and returns
+ * to idle after the program's {@code ECALL}. The router keeps one
+ * {@link MachineRuntime} and boots it once per reload, so the kernel is reused
+ * across messages. Program RAM, including its data and bss, persists between
+ * units; several programs, per-unit program isolation and arbitrary load
+ * addresses are still pending V4 work.</p>
  *
  * <p>Failures never degrade to a default success. A faulted guest, an exhausted
  * watchdog, a malformed ROM or a policy without a decision produce
- * {@link PolicyTarget#REJECT} with an explicit reason. When the machine cannot
- * be cold-reset after a fault, every later route reports
- * {@code RESTART_REQUIRED} until {@link #reload()} succeeds.</p>
+ * {@link PolicyTarget#REJECT} with an explicit reason. After a guest failure the
+ * machine is not reused: every later route reports {@code RESTART_REQUIRED}
+ * until {@link #reload()} succeeds.</p>
  */
 public final class Iflow32Router implements Router, AutoCloseable {
 
@@ -95,7 +99,8 @@ public final class Iflow32Router implements Router, AutoCloseable {
     private MachineRuntime runtime;
     private HostAbi host;
     private V3HostBridge bridge;
-    private boolean machineDirty;
+    private boolean booted;
+    private int boots;
     private String machineFailure;
     private boolean closed;
 
@@ -142,6 +147,13 @@ public final class Iflow32Router implements Router, AutoCloseable {
         return programSha256;
     }
 
+    /** @return times the guest kernel was booted since the last reload. */
+    public int boots() {
+        synchronized (machineLock) {
+            return boots;
+        }
+    }
+
     /** Reloads {@code policy.flow} and discards the current machine. */
     public boolean reload() {
         synchronized (machineLock) {
@@ -185,25 +197,19 @@ public final class Iflow32Router implements Router, AutoCloseable {
             }
             try {
                 ensureMachine();
-                if (machineDirty) {
-                    try {
-                        runtime.coldReset();
-                        machineDirty = false;
-                    } catch (RuntimeException failure) {
-                        machineFailure = message(failure);
-                        return outcome(PolicyTarget.REJECT,
-                                "iflow-32 requires restart: cold reset failed: "
-                                        + machineFailure,
-                                recipient, emitter, message);
-                    }
+                if (!booted) {
+                    runUntilIdle();
+                    booted = true;
+                    boots++;
                 }
 
                 bridge.open(MESSAGE_HANDLE, message, emitter, recipient);
                 boolean committed = false;
                 try {
                     host.beginExecution(MESSAGE_HANDLE);
-                    machineDirty = true;
-                    runUntilHalted();
+                    runtime.memory().mailbox().publish(
+                            HostMailbox.TYPE_MESSAGE, MESSAGE_HANDLE);
+                    runUntilIdle();
                     host.commitExecution(MESSAGE_HANDLE);
                     committed = true;
                 } finally {
@@ -235,15 +241,21 @@ public final class Iflow32Router implements Router, AutoCloseable {
                     reason = "iflow-32 " + target.name().toLowerCase(java.util.Locale.ROOT);
                 }
                 return outcome(target, reason, recipient, emitter, routed);
-            } catch (HostServiceException | RuntimeException failure) {
+            } catch (HostServiceException failure) {
                 if (bridge != null) {
                     bridge.close(MESSAGE_HANDLE);
                 }
-                if (runtime != null && runtime.faulted()) {
-                    machineFailure = message(failure);
-                }
                 return outcome(PolicyTarget.REJECT,
                         "iflow-32 internal error: " + message(failure),
+                        recipient, emitter, message);
+            } catch (RuntimeException failure) {
+                if (bridge != null) {
+                    bridge.close(MESSAGE_HANDLE);
+                }
+                machineFailure = message(failure);
+                booted = false;
+                return outcome(PolicyTarget.REJECT,
+                        "iflow-32 requires restart: " + machineFailure,
                         recipient, emitter, message);
             }
         }
@@ -344,24 +356,33 @@ public final class Iflow32Router implements Router, AutoCloseable {
         HostAbi abi = this.host;
         this.runtime = new MachineRuntime(memory, clock, rom.header().resetVector(),
                 ExecutionQuantum.defaults(), watchdog, ignored -> abi, System::nanoTime);
-        this.machineDirty = false;
+        this.booted = false;
         this.machineFailure = null;
     }
 
-    private void runUntilHalted() {
+    /**
+     * Runs every core until all of them are idle in {@code HALT}. A pending
+     * mailbox IRQ wakes the halted core inside {@code runCore}, so halted cores
+     * are executed instead of skipped; the loop ends only when every core is
+     * halted again after at least one round.
+     */
+    private void runUntilIdle() {
         for (int slice = 0; slice < MAX_SLICES; slice++) {
-            boolean allHalted = true;
             for (int core = 0; core < runtime.coreCount(); core++) {
-                if (runtime.core(core).cpu().halted()) {
-                    continue;
-                }
                 ExecutionReport report = runtime.runCore(core);
                 if (report.status() == ExecutionStatus.WATCHDOG) {
                     throw new IllegalStateException(
                             "watchdog expired on COREID " + core);
                 }
+            }
+            if (runtime.faulted()) {
+                throw new IllegalStateException("guest faulted");
+            }
+            boolean allHalted = true;
+            for (int core = 0; core < runtime.coreCount(); core++) {
                 if (!runtime.core(core).cpu().halted()) {
                     allHalted = false;
+                    break;
                 }
             }
             if (allHalted) {
@@ -369,14 +390,15 @@ public final class Iflow32Router implements Router, AutoCloseable {
             }
         }
         throw new IllegalStateException(
-                "guest did not halt within " + MAX_SLICES + " slices");
+                "guest did not become idle within " + MAX_SLICES + " slices");
     }
 
     private void discardMachine() {
         runtime = null;
         host = null;
         bridge = null;
-        machineDirty = false;
+        booted = false;
+        boots = 0;
         machineFailure = null;
     }
 

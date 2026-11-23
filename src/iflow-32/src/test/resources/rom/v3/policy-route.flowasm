@@ -315,19 +315,68 @@ boot_copy:
 .org 0x80001000
 .entry kmain
 
-; El hardware salta a TVEC + 4*CAUSE. El vector 0 ocupa 0..6 y el 7 (ECALL
-; de usuario) empieza en el offset 28, sin solapar el stub generico.
+; El hardware salta a TVEC + 4*CAUSE. Cada entrada ocupa 4 bytes: las libres
+; contienen ECALL, de modo que cualquier trap sin handler termina en la doble
+; falta (vector 14, tambien ECALL) y la VM queda FAULTED de forma explicita.
+; El vector 7 (ECALL de usuario) y el 21 (IRQ 5 del mailbox) usan un JMP de
+; 7 bytes que solapa el slot siguiente, un vector que este slice no usa.
 trap_table:
-    JMP generic_trap
-    .space 21
+    ECALL
+    .space 1
+    ECALL
+    .space 1
+    ECALL
+    .space 1
+    ECALL
+    .space 1
+    ECALL
+    .space 1
+    ECALL
+    .space 1
+    ECALL
+    .space 1
     JMP user_exit
+    .space 1
+    ECALL
+    .space 1
+    ECALL
+    .space 1
+    ECALL
+    .space 1
+    ECALL
+    .space 1
+    ECALL
+    .space 1
+    ECALL
+    .space 1
+    ECALL
+    .space 1
+    ECALL
+    .space 1
+    ECALL
+    .space 1
+    ECALL
+    .space 1
+    ECALL
+    .space 1
+    ECALL
+    .space 1
+    JMP mailbox_irq
+    .space 1
+    ECALL
+    .space 1
 
 kmain:
     MOV R9, 0x02000000
     MOV R1, trap_table
     CSRW TVEC, R1
 
-    ; Sin IRQ pendientes en este slice: timer apagado y PIC enmascarado.
+    ; Desenmascarar solo la IRQ 5 (mailbox) en el banco del core 0.
+    MOV R1, 0x01002004
+    MOV R2, 0xFFFFFFDF
+    MOV [R1], R2
+
+    ; Sin IRQ pendientes en este slice: timer apagado.
     CSRR R1, STATUS
     OR R1, 1
     CSRW STATUS, R1
@@ -542,22 +591,17 @@ map_store:
     FENCE
     SFENCE.VMA
 
-    ; Identidad del programa y del mensaje de prueba.
+    ; Identidad del programa; el MIDENT se asigna por unidad desde el mailbox.
     MOV R1, 0
     CSRW PIDENT, R1
-    MOV R1, 1
+    MOV R1, 0xFFFFFFFF
     CSRW MIDENT, R1
 
     MOV R1, 1
     MOV [R9 + 0xE0A0], R1
 
-    ; Entrar en modo usuario en el entry point del programa.
-    MOV SP, 0x02600F00
-    MOV R1, [R9 + 0xE078]
-    CSRW EPC, R1
-    MOV R1, 0x36
-    CSRW STATUS, R1
-    ERET
+    ; El kernel queda a la espera; cada unidad entra en U desde el mailbox.
+    JMP idle
 
 bad_count:
     MOV R1, 0xBAD00003
@@ -592,36 +636,52 @@ fail:
     CSRW STATUS, R1
     HALT
 
-; Vector 7 (ECALL de usuario): registrar la causa y terminar la maquina.
+; Vector 7 (ECALL de usuario): cerrar la unidad y volver al idle del kernel.
 user_exit:
-    MOV R4, 0x0200E0A8
-    MOV [R4], R0
-    MOV [R4 + 4], R1
+    MOV R9, 0x02000000
     CSRR R3, CAUSE
-    MOV R1, 0x0200E038
-    MOV [R1], R3
     CMP R3, 7
-    JNE generic_trap
-    MOV R1, 1
-    MOV R2, 0x0200E0A4
-    MOV [R2], R1
-    CSRR R1, STATUS
-    OR R1, 1
+    JNE unexpected_trap
+    MOV R1, 0xFFFFFFFF
+    CSRW MIDENT, R1
+    ; Supervisor + MMU + IE: el JMP a idle debe ejecutarse en modo supervisor.
+    MOV R1, 0x13
     CSRW STATUS, R1
-    HALT
+    JMP idle
 
-; Cualquier trap inesperado deja evidencia y detiene el core.
-generic_trap:
-    MOV R1, 0xBAD0000C
-    MOV R2, 0x0200E034
-    MOV [R2], R1
-    CSRR R3, CAUSE
-    MOV R2, 0x0200E038
-    MOV [R2], R3
-    CSRR R1, STATUS
-    OR R1, 1
-    CSRW STATUS, R1
+; Espera de la siguiente unidad: HALT hasta que el host publique un mensaje y
+; levante la IRQ 5. El handler lee el handle, hace ACK y entra en U.
+idle:
     HALT
+    JMP idle
+
+mailbox_irq:
+    MOV R9, 0x02000000
+    ; Retirar la IRQ 5 de servicio en el PIC antes de validar el evento.
+    MOV R3, 0x20
+    MOV R2, 0x01002008
+    MOV [R2], R3
+    MOV R1, 0x01006000
+    MOV R2, [R1 + 0x00]
+    CMP R2, 1
+    JNE unexpected_trap
+    MOV R2, [R1 + 0x04]
+    CMP R2, 0
+    JZ unexpected_trap
+    MOV R3, 1
+    MOV [R1 + 0x10], R3
+    CSRW MIDENT, R2
+    MOV SP, 0x02600F00
+    MOV R3, [R9 + 0xE078]
+    CSRW EPC, R3
+    MOV R3, 0x36
+    CSRW STATUS, R3
+    ERET
+
+; Trap inesperado dentro de un handler: ECALL con TRAP ya activo encadena la
+; doble falta y deja la VM FAULTED; nunca se ignora en silencio.
+unexpected_trap:
+    ECALL
 
 .section .program.loader
 .org 0x02500000

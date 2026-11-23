@@ -8,8 +8,10 @@
 > frío con NVRAM persistente); V4 loader slice completado (el kernel guest carga el `PROGRAM`,
 > mapea `W^X`, entra en modo usuario y ejecuta `HOST MESSAGE_ID` y `HOST ROUTE_DECISION`); V4
 > hub/Router slice completado (`Iflow32Activator`, `Iflow32Router` y `V3HostBridge`: una política
-> `.flow` real decide por `message.content` y el hub obtiene un `RouteOutcome`). Falta el resto de
-> V4: kernel persistente con mailbox, varios programas y load addresses arbitrarias.
+> `.flow` real decide por `message.content` y el hub obtiene un `RouteOutcome`); kernel persistente
+> completado (arranque único, mailbox `TYPE_MESSAGE` + IRQ 5, `MIDENT` por unidad y retorno a
+> `HALT` tras el `ECALL`). Falta el resto de V4: varios programas, aislamiento de la RAM del
+> programa entre unidades y load addresses arbitrarias.
 >
 > Este módulo implementa el contrato de ADR-037: ISA v3 de 32 bits, MMU paginada, bus MMIO,
 > dispositivos, PIC/timer y ABI `HOST` v3. No comparte núcleo, decoder, MMU, formato ROM ni ABI con
@@ -32,9 +34,10 @@
   latch único de `ROUTE_DECISION` hasta el commit o aborto de la unidad. `V3HostBridge` resuelve el
   vocabulario `scope`/`property` de ADR-037 §7.14 contra la unidad abierta, aplica el write set como
   lote atómico y traduce `ROUTE_DECISION` a la decisión del host.
-- `engine/v3`: `Iflow32Router` implementa `Router`; carga `policy.flow`, arranca la VM v3 por
-  mensaje y mapea `DELIVER`→`LOG`, `CANCEL_EVENT`→`DROP` y `ERROR`→`REJECT`. `Iflow32Activator`
-  publica el router y el `IflowBackend` `iflow-32` para el hub.
+- `engine/v3`: `Iflow32Router` implementa `Router`; carga `policy.flow`, arranca el kernel una vez
+  por recarga, publica cada mensaje en el mailbox y mapea `DELIVER`→`LOG`,
+  `CANCEL_EVENT`→`DROP` y `ERROR`→`REJECT`. `Iflow32Activator` publica el router y el
+  `IflowBackend` `iflow-32` para el hub.
 
 ## Tiempo y ejecución
 
@@ -126,15 +129,20 @@ explícito. No hay política por defecto ni ROM embebida.
 - `Iflow32Router` está cableado al hub: publica `Router`/`IflowBackend` con nombre `iflow-32` y no
   participa en el fallback de 16 bits. El motor v2 (`VmPolicyEngine`/`VmConfigLoader`/
   `Iflow16Activator`) no forma parte de esta línea.
-- Ciclo de vida del slice actual: el kernel guest acepta **un solo** `PROGRAM` y termina tras su
-  salida, así que el router arranca la VM para cada mensaje y hace `coldReset()` entre unidades
-  (NVRAM intacta). Es un reinicio del kernel, no una reutilización. Un fallo de ROM, un trap, el
-  watchdog o una política sin decisión producen `REJECT` explícito; si tras un fault no es posible
-  el reinicio en frío, las rutas siguientes responden `RESTART_REQUIRED` hasta `reload()`.
+- Ciclo de vida del slice actual: el kernel guest acepta **un solo** `PROGRAM`, lo carga durante el
+  arranque y queda en `HALT` dentro de un bucle de espera. El router arranca el kernel **una sola
+  vez** por recarga y reutiliza la VM: cada mensaje se publica con `TYPE_MESSAGE` + IRQ 5, el
+  kernel lee el handle, hace `ACK` en mailbox y PIC, fija `MIDENT`, entra en U y vuelve a `HALT`
+  tras el `ECALL` de usuario. No hay reinicio en frío ni recarga del `PROGRAM`; la RAM del programa
+  persiste entre unidades (el aislamiento por unidad queda pendiente). Un fallo de ROM, un trap, el
+  watchdog o una política sin decisión producen `REJECT` explícito; tras un fault la máquina no se
+  reutiliza y las rutas siguientes responden `RESTART_REQUIRED` hasta `reload()`. `boots()` expone
+  el número de arranques para verificar la reutilización en tests.
 - V4 loader slice: el kernel guest acepta **un solo** `PROGRAM` en `0x02500000` con
   `memSize <= 64 KiB` y datos alineados a página después del código. Valida magic/estructura
   `PRG3`, copia el segmento a `0x02800000`, zero-fill hasta `memSize`, mapea código `R/X/U`,
-  datos/bss y pila `R/W/U` (sin `W && X` por página) y entra en U con `PIDENT` 0 y `MIDENT` 1.
+  datos/bss y pila `R/W/U` (sin `W && X` por página) y entra en U con `PIDENT` 0 y el `MIDENT`
+  que el kernel toma del handle del mailbox.
   Los datos y el bss deben empezar en páginas posteriores al código; si comparten la última
   página de código, el loader falla con `BAD0000A` en vez de degradar `W^X`.
   El programa llama a `HOST` para leer propiedades y emitir `ROUTE_DECISION`; la decisión vive en
@@ -142,5 +150,5 @@ explícito. No hay política por defecto ni ROM embebida.
   El host sigue siendo el único que verifica SHA-256 y nombres de capacidad (`RomParser`); el
   guest revalida los rangos que consume. Más de un programa, otra `loadAddress`, `memSize`
   mayor o datos que compartan página con código fallan con un marcador `BADxxxxxx` explícito,
-  sin relocación ni fallback. El kernel persistente con mailbox, los programas múltiples, las
-  load addresses arbitrarias y el scheduler de procesos quedan pendientes en V4.
+  sin relocación ni fallback. Los programas múltiples, el aislamiento de la RAM del programa entre
+  unidades, las load addresses arbitrarias y el scheduler de procesos quedan pendientes en V4.

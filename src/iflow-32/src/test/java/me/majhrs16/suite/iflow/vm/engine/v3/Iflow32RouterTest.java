@@ -53,16 +53,18 @@ class Iflow32RouterTest {
 
             Message allowed = message(emitter, "allow this");
             RouteOutcome delivered = router.route(allowed, recipient);
-            assertEquals(PolicyTarget.LOG, delivered.decision().target());
+            assertEquals(PolicyTarget.LOG, delivered.decision().target(),
+                    delivered.decision().reason());
             assertEquals("policy", delivered.decision().reason());
             assertEquals(allowed.id(), delivered.message().id());
 
-            // Third unit: the machine was cold-reset after the second message
-            // and the guest still reads the new content, not a cached decision.
+            // Third unit: the kernel was booted once and reused; the guest
+            // still reads the new content instead of a cached decision.
             RouteOutcome droppedAgain = router.route(
                     message(emitter, "block again"), recipient);
             assertEquals(PolicyTarget.DROP, droppedAgain.decision().target());
             assertEquals("blocked", droppedAgain.decision().reason());
+            assertEquals(1, router.boots(), "the kernel must boot only once");
         } finally {
             router.close();
         }
