@@ -655,6 +655,45 @@ idle:
     HALT
     JMP idle
 
+; Reinicia la RAM del programa antes de cada unidad: recopia el segmento desde
+; la ROM, hace zero-fill hasta memSize y limpia la pila de usuario. El kernel
+; sigue vivo; solo se restaura el estado del programa.
+reset_unit_state:
+    MOV R1, [R9 + 0xE070]
+    MOV R2, 0x02800000
+    MOV R3, [R9 + 0xE074]
+reset_copy:
+    MOV.B R4, [R1]
+    MOV.B [R2], R4
+    ADD R1, 1
+    ADD R2, 1
+    SUB R3, 1
+    JNZ reset_copy
+
+    MOV R1, [R9 + 0xE074]
+    MOV R2, 0x02800000
+    ADD R2, R1
+    MOV R3, [R9 + 0xE080]
+    SUB R3, R1
+    JZ reset_stack
+reset_zero:
+    MOV R4, 0
+    MOV.B [R2], R4
+    ADD R2, 1
+    SUB R3, 1
+    JNZ reset_zero
+
+reset_stack:
+    MOV R2, 0x02900000
+    MOV R3, 1024
+reset_stack_loop:
+    MOV R4, 0
+    MOV [R2], R4
+    ADD R2, 4
+    SUB R3, 1
+    JNZ reset_stack_loop
+    RET
+
 mailbox_irq:
     MOV R9, 0x02000000
     ; Retirar la IRQ 5 de servicio en el PIC antes de validar el evento.
@@ -671,6 +710,8 @@ mailbox_irq:
     MOV R3, 1
     MOV [R1 + 0x10], R3
     CSRW MIDENT, R2
+    MOV SP, 0x023FF000
+    CALL reset_unit_state
     MOV SP, 0x02600F00
     MOV R3, [R9 + 0xE078]
     CSRW EPC, R3
@@ -694,6 +735,14 @@ unexpected_trap:
 ; "b..." cancela el evento; cualquier otro contenido se entrega. Un fallo de
 ; lectura, una propiedad ausente o un TLV inesperado producen ERROR explicito.
 program_start:
+    ; La pila debe llegar limpia: el kernel reinicia la RAM del programa en
+    ; cada unidad. Un marcador viejo delata aislamiento incompleto.
+    MOV R9, 0x02600E00
+    MOV R8, [R9]
+    CMP R8, 0
+    JNE stale_state
+    MOV R8, 0xDEADBEEF
+    MOV [R9], R8
     MOV R2, read_args
     MOV R3, 52
     MOV R4, 0x02600800
@@ -733,6 +782,10 @@ blocked:
     JMP decide
 
 read_failed:
+    MOV R2, decision_error
+    MOV R3, 50
+
+stale_state:
     MOV R2, decision_error
     MOV R3, 50
 

@@ -27,8 +27,10 @@ import me.majhrs16.suite.api.spi.PluginLogger;
  * {@code HOST} ABI and decides from the first byte: a text starting with
  * {@code b} is cancelled, anything else is delivered. The decision therefore
  * cannot come from a constant policy and proves that the guest observed the
- * host message for every unit, including after the cold reset between
- * messages.</p>
+ * host message for every unit. The kernel is booted once and reused; before
+ * each unit it restores the program segment and clears the user stack, so the
+ * fixture's stack marker also proves that no unit inherits RAM from the
+ * previous one.</p>
  */
 class Iflow32RouterTest {
 
@@ -47,7 +49,8 @@ class Iflow32RouterTest {
 
             Message blocked = message(emitter, "block this");
             RouteOutcome dropped = router.route(blocked, recipient);
-            assertEquals(PolicyTarget.DROP, dropped.decision().target());
+            assertEquals(PolicyTarget.DROP, dropped.decision().target(),
+                    dropped.decision().reason());
             assertEquals("blocked", dropped.decision().reason());
             assertEquals(blocked.id(), dropped.message().id());
 

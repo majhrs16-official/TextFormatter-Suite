@@ -10,8 +10,9 @@
 > hub/Router slice completado (`Iflow32Activator`, `Iflow32Router` y `V3HostBridge`: una política
 > `.flow` real decide por `message.content` y el hub obtiene un `RouteOutcome`); kernel persistente
 > completado (arranque único, mailbox `TYPE_MESSAGE` + IRQ 5, `MIDENT` por unidad y retorno a
-> `HALT` tras el `ECALL`). Falta el resto de V4: varios programas, aislamiento de la RAM del
-> programa entre unidades y load addresses arbitrarias.
+> `HALT` tras el `ECALL`); aislamiento por unidad completado (el kernel recopia el segmento,
+> hace zero-fill hasta `memSize` y limpia la página de pila antes de cada unidad). Falta el
+> resto de V4: varios programas y load addresses arbitrarias.
 >
 > Este módulo implementa el contrato de ADR-037: ISA v3 de 32 bits, MMU paginada, bus MMIO,
 > dispositivos, PIC/timer y ABI `HOST` v3. No comparte núcleo, decoder, MMU, formato ROM ni ABI con
@@ -133,11 +134,12 @@ explícito. No hay política por defecto ni ROM embebida.
   arranque y queda en `HALT` dentro de un bucle de espera. El router arranca el kernel **una sola
   vez** por recarga y reutiliza la VM: cada mensaje se publica con `TYPE_MESSAGE` + IRQ 5, el
   kernel lee el handle, hace `ACK` en mailbox y PIC, fija `MIDENT`, entra en U y vuelve a `HALT`
-  tras el `ECALL` de usuario. No hay reinicio en frío ni recarga del `PROGRAM`; la RAM del programa
-  persiste entre unidades (el aislamiento por unidad queda pendiente). Un fallo de ROM, un trap, el
-  watchdog o una política sin decisión producen `REJECT` explícito; tras un fault la máquina no se
-  reutiliza y las rutas siguientes responden `RESTART_REQUIRED` hasta `reload()`. `boots()` expone
-  el número de arranques para verificar la reutilización en tests.
+  tras el `ECALL` de usuario. No hay reinicio en frío ni recarga del `PROGRAM`; antes de cada
+  unidad el kernel recopia el segmento desde la ROM, hace zero-fill hasta `memSize` y limpia la
+  página de pila, de modo que la RAM del programa no se hereda entre unidades. Un fallo de ROM,
+  un trap, el watchdog o una política sin decisión producen `REJECT` explícito; tras un fault la
+  máquina no se reutiliza y las rutas siguientes responden `RESTART_REQUIRED` hasta `reload()`.
+  `boots()` expone el número de arranques para verificar la reutilización en tests.
 - V4 loader slice: el kernel guest acepta **un solo** `PROGRAM` en `0x02500000` con
   `memSize <= 64 KiB` y datos alineados a página después del código. Valida magic/estructura
   `PRG3`, copia el segmento a `0x02800000`, zero-fill hasta `memSize`, mapea código `R/X/U`,
@@ -150,5 +152,6 @@ explícito. No hay política por defecto ni ROM embebida.
   El host sigue siendo el único que verifica SHA-256 y nombres de capacidad (`RomParser`); el
   guest revalida los rangos que consume. Más de un programa, otra `loadAddress`, `memSize`
   mayor o datos que compartan página con código fallan con un marcador `BADxxxxxx` explícito,
-  sin relocación ni fallback. Los programas múltiples, el aislamiento de la RAM del programa entre
-  unidades, las load addresses arbitrarias y el scheduler de procesos quedan pendientes en V4.
+  sin relocación ni fallback. El aislamiento de la RAM del programa entre unidades está completado;
+  los programas múltiples, las load addresses arbitrarias y el scheduler de procesos quedan
+  pendientes en V4.
