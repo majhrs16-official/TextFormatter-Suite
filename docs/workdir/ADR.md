@@ -1,6 +1,6 @@
 # ADR — TextFormatter Suite v1.0 (pre-release)
 
-Fecha: 2026-08-14 · Estado: aceptado (pre-release, sin versión estable) · Última actualización: 2026-11-22
+Fecha: 2026-08-14 · Estado: aceptado (pre-release, sin versión estable) · Última actualización: 2026-11-23
 
 > **Documento vivo:** se actualiza en el mismo cambio que introduce una decisión de arquitectura.
 > Solo conserva decisiones vigentes; el historial cerrado, las fases y el estado operativo viven en
