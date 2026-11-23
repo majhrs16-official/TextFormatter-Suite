@@ -177,9 +177,11 @@ final class RomFixture {
         private boolean signed;
         private byte[] signature = new byte[0];
         private int resetVector;
+        private boolean resetExplicit;
 
         Builder bios(byte[] data, int memSize) {
-            return segment(RomSegmentType.BIOS.code(), R | X, 0, 0, memSize, data);
+            int load = alignPage(80 + (segments.size() + 1) * 64);
+            return segment(RomSegmentType.BIOS.code(), R | X, load, load, memSize, data);
         }
 
         Builder boot(byte[] data, int loadAddress, int memSize) {
@@ -232,16 +234,29 @@ final class RomFixture {
 
         Builder resetVector(int resetVector) {
             this.resetVector = resetVector;
+            this.resetExplicit = true;
             return this;
+        }
+
+        private static int alignPage(int value) {
+            return (value + PAGE - 1) & ~(PAGE - 1);
         }
 
         byte[] build() {
             int tocBytes = 80 + segments.size() * 64;
-            int dataBytes = 0;
-            for (Spec spec : segments) {
-                dataBytes += spec.data.length;
+            int[] offsets = new int[segments.size()];
+            int cursor = tocBytes;
+            int dataEnd = cursor;
+            for (int i = 0; i < segments.size(); i++) {
+                Spec spec = segments.get(i);
+                if (spec.type == RomSegmentType.BIOS.code()) {
+                    cursor = spec.loadAddress;
+                }
+                offsets[i] = cursor;
+                cursor += spec.data.length;
+                dataEnd = Math.max(dataEnd, cursor);
             }
-            int signatureOffset = tocBytes + dataBytes;
+            int signatureOffset = dataEnd;
             int total = signatureOffset + signature.length;
             byte[] rom = new byte[total];
 
@@ -259,7 +274,12 @@ final class RomFixture {
             putU16(rom, 14, 80);
             putU32(rom, 16, signed ? 1 : 0);
             putU32(rom, 20, total);
-            putU32(rom, 24, resetVector);
+            int reset = resetExplicit ? resetVector : segments.stream()
+                    .filter(spec -> spec.type == RomSegmentType.BIOS.code())
+                    .mapToInt(spec -> spec.loadAddress)
+                    .findFirst()
+                    .orElse(0);
+            putU32(rom, 24, reset);
             putU32(rom, 28, 80);
             putU16(rom, 32, segments.size());
             putU16(rom, 34, 64);
@@ -269,21 +289,19 @@ final class RomFixture {
                 putU32(rom, 44, signature.length);
             }
 
-            int cursor = tocBytes;
             for (int i = 0; i < segments.size(); i++) {
                 Spec spec = segments.get(i);
                 int entry = 80 + i * 64;
                 rom[entry] = (byte) spec.type;
                 rom[entry + 1] = (byte) spec.flags;
-                putU32(rom, entry + 4, cursor);
+                putU32(rom, entry + 4, offsets[i]);
                 putU32(rom, entry + 8, spec.data.length);
                 putU32(rom, entry + 12, spec.loadAddress);
                 putU32(rom, entry + 16, spec.entryPoint);
                 putU32(rom, entry + 20, spec.memSize);
                 byte[] hash = sha256(spec.data, 0, spec.data.length);
                 System.arraycopy(hash, 0, rom, entry + 24, 32);
-                System.arraycopy(spec.data, 0, rom, cursor, spec.data.length);
-                cursor += spec.data.length;
+                System.arraycopy(spec.data, 0, rom, offsets[i], spec.data.length);
             }
             if (signature.length > 0) {
                 System.arraycopy(signature, 0, rom, signatureOffset, signature.length);

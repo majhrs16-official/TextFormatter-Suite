@@ -88,6 +88,7 @@ export class AssemblerV3 {
   private readonly sections: SectionBuilder[] = [];
   private resetName?: string;
   private resetVector = 0;
+  private defaultBiosOrg = PAGE_SIZE;
   private sourceStatements: readonly Statement[] = [];
   private sourceFile = 'flowasm';
 
@@ -97,9 +98,13 @@ export class AssemblerV3 {
     this.sections.length = 0;
     this.resetName = undefined;
     this.resetVector = 0;
+    this.defaultBiosOrg = PAGE_SIZE;
     const parsed = parseSource(source, file, this.diagnostics);
     this.sourceFile = file;
     this.sourceStatements = parsed.statements;
+    const sectionCount = parsed.statements.filter(statement => statement.kind === 'directive'
+      && statement.name === 'section').length;
+    this.defaultBiosOrg = align(HEADER_SIZE + sectionCount * TOC_ENTRY_SIZE, PAGE_SIZE);
     this.layout(parsed);
     this.validateSections();
     this.resetVector = this.resolveReset(options);
@@ -197,7 +202,7 @@ export class AssemblerV3 {
       this.error(statement, `duplicate section '${rawName}'`);
       return undefined;
     }
-    const org = DEFAULT_ORG[type];
+    const org = type === SectionType.BIOS ? this.defaultBiosOrg : DEFAULT_ORG[type];
     const section: SectionBuilder = {
       name: rawName,
       type,
@@ -478,13 +483,27 @@ export class AssemblerV3 {
 
   private writeRom(segments: readonly SegmentLayout[], maxRomSize: number): Uint8Array {
     const tocCount = segments.length;
-    let offset = align(HEADER_SIZE + tocCount * TOC_ENTRY_SIZE, 16);
-    const offsets: number[] = [];
-    for (const segment of segments) {
-      offset = align(offset, 16);
-      offsets.push(offset);
-      offset += segment.bytes.length;
+    const firstFree = align(HEADER_SIZE + tocCount * TOC_ENTRY_SIZE, 16);
+    const biosIndex = segments.findIndex(
+      segment => segment.section.type === SectionType.BIOS);
+    const offsets = new Array<number>(segments.length).fill(0);
+    let offset = firstFree;
+
+    // The BIOS is mapped directly from the container, so its ROM offset must be
+    // its execution address. Every other segment is placed after it.
+    if (biosIndex >= 0) {
+      const bios = segments[biosIndex];
+      offsets[biosIndex] = bios.section.org;
+      offset = Math.max(offset, bios.section.org + bios.bytes.length);
     }
+    segments.forEach((segment, index) => {
+      if (index === biosIndex) {
+        return;
+      }
+      offset = align(offset, 16);
+      offsets[index] = offset;
+      offset += segment.bytes.length;
+    });
     const romSize = offset;
     if (romSize > maxRomSize) {
       this.errorAt(`ROM is ${romSize} bytes, above the ${maxRomSize}-byte limit`, 1, 1);
@@ -545,8 +564,11 @@ export class AssemblerV3 {
       if ((section.flags & ~0x0f) !== 0) {
         this.errorAt(`section '${section.name}' has reserved flags`, 1, 1);
       }
-      if (section.type === SectionType.BIOS && section.org !== 0) {
-        this.errorAt('BIOS must load at 0x00000000', 1, 1);
+      if (section.type === SectionType.BIOS && section.org < this.defaultBiosOrg) {
+        this.errorAt(
+          `BIOS must load at or above 0x${this.defaultBiosOrg.toString(16).padStart(8, '0')}`,
+          1,
+          1);
       }
       if (section.type === SectionType.PROGRAM
           && (section.flags & SEGMENT_FLAGS.U) === 0) {

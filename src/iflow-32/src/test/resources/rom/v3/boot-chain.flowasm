@@ -1,0 +1,230 @@
+; iflow-32 guest boot chain (V3-2b boot slice).
+;
+; BIOS (core 0): POST minimo, escaneo de la TOC, page tables y MMU.
+; BOOT: copia KERNEL de ROM a RAM, ejecuta SFENCE.VMA y salta al kernel.
+; KERNEL: publica el marcador de arranque y duerme. Scheduler, IPI y
+; TLB shootdown se implementan en el siguiente slice de V3-2b.
+;
+; Scratch (RAM fisica, identidad tras encender la MMU):
+;   0x0200E000 boot.offset      0x0200E004 boot.size
+;   0x0200E008 boot.entry       0x0200E00C boot.loadAddress
+;   0x0200E010 kernel.offset    0x0200E014 kernel.size
+;   0x0200E018 kernel.entry     0x0200E01C kernel.loadAddress
+;   0x0200E020 kernel.memSize   0x0200E030 boot marker
+;
+; Page tables:
+;   0x02000000 L1
+;   0x02001000..0x02004000 L2 ROM (16 MiB, identidad R/X)
+;   0x02005000 L2 RAM (4 MiB, identidad R/W/U)
+;   0x02006000 L2 kernel (4 MiB, R/X)
+;   0x02010000 copia de BOOT (4 KiB)
+;   0x02020000 copia de KERNEL (hasta 4 MiB)
+
+.section .bios
+.org 0x00001000
+.entry start
+start:
+    CSRR R1, COREID
+    CMP R1, 0
+    JZ core0
+
+park:
+    CSRR R1, STATUS
+    OR R1, 1
+    CSRW STATUS, R1
+    HALT
+
+core0:
+    MOV R0, 0
+    MOV R9, 0x02000000
+    MOV R14, 0x023FF000
+
+    ; Escanear la TOC: cabecera en ROM fisica 0.
+    MOV R1, [R0 + 28]
+    MOV R2, [R0 + 32]
+    AND R2, 0xFFFF
+    MOV R3, R1
+scan:
+    MOV.B R4, [R3]
+    CMP R4, 2
+    JNE scan_kernel
+    MOV R5, [R3 + 4]
+    MOV [R9 + 0xE000], R5
+    MOV R5, [R3 + 8]
+    MOV [R9 + 0xE004], R5
+    MOV R5, [R3 + 16]
+    MOV [R9 + 0xE008], R5
+    MOV R5, [R3 + 12]
+    MOV [R9 + 0xE00C], R5
+    JMP scan_next
+scan_kernel:
+    CMP R4, 3
+    JNE scan_next
+    MOV R5, [R3 + 4]
+    MOV [R9 + 0xE010], R5
+    MOV R5, [R3 + 8]
+    MOV [R9 + 0xE014], R5
+    MOV R5, [R3 + 16]
+    MOV [R9 + 0xE018], R5
+    MOV R5, [R3 + 12]
+    MOV [R9 + 0xE01C], R5
+    MOV R5, [R3 + 20]
+    MOV [R9 + 0xE020], R5
+scan_next:
+    ADD R3, 64
+    SUB R2, 1
+    JNZ scan
+
+    ; Limites de este slice: BOOT en una pagina, KERNEL en 4 MiB.
+    MOV R1, [R9 + 0xE004]
+    CMP R1, 0x1000
+    JHI boot_too_big
+    MOV R1, [R9 + 0xE020]
+    CMP R1, 0x400000
+    JHI kernel_too_big
+
+    ; L1: ROM 0..16 MiB, RAM 0x02000000, kernel 0x80000000.
+    MOV R1, 0x02000000
+    MOV R11, 0x02001000
+    OR R11, 1
+    MOV [R1 + 0], R11
+    MOV R11, 0x02002000
+    OR R11, 1
+    MOV [R1 + 4], R11
+    MOV R11, 0x02003000
+    OR R11, 1
+    MOV [R1 + 8], R11
+    MOV R11, 0x02004000
+    OR R11, 1
+    MOV [R1 + 12], R11
+    MOV R11, 0x02005000
+    OR R11, 1
+    MOV [R1 + 32], R11
+    MOV R11, 0x02006000
+    OR R11, 1
+    MOV [R1 + 2048], R11
+
+    ; L2 ROM: 4 tablas de 1024 paginas R/X.
+    MOV R12, 1024
+    MOV R1, 0x02001000
+    MOV R2, 0x00000000
+    CALL fill_rx
+    MOV R12, 1024
+    MOV R1, 0x02002000
+    MOV R2, 0x00400000
+    CALL fill_rx
+    MOV R12, 1024
+    MOV R1, 0x02003000
+    MOV R2, 0x00800000
+    CALL fill_rx
+    MOV R12, 1024
+    MOV R1, 0x02004000
+    MOV R2, 0x00C00000
+    CALL fill_rx
+
+    ; L2 RAM: 1024 paginas R/W/U.
+    MOV R12, 1024
+    MOV R1, 0x02005000
+    MOV R2, 0x02000000
+    CALL fill_rw
+
+    ; L2 kernel: pagina 0 para BOOT, 1..1023 para KERNEL.
+    MOV R1, 0x02006000
+    MOV R2, 0x02010000
+    MOV R3, R2
+    OR R3, 0x15
+    MOV [R1], R3
+    MOV R12, 1023
+    MOV R1, 0x02006004
+    MOV R2, 0x02020000
+    CALL fill_rx
+
+    ; Copiar BOOT a RAM y saltar a su direccion virtual.
+    MOV R1, [R9 + 0xE000]
+    MOV R2, 0x02010000
+    MOV R3, [R9 + 0xE004]
+    CALL copy_bytes
+
+    MOV R1, 0x02000000
+    CSRW PTBR, R1
+    CSRR R1, STATUS
+    OR R1, 0x10
+    CSRW STATUS, R1
+    MOV R5, [R9 + 0xE008]
+    JMP R5
+
+boot_too_big:
+    MOV R1, 0xBAD00001
+    MOV [R9 + 0xE030], R1
+    HALT
+kernel_too_big:
+    MOV R1, 0xBAD00002
+    MOV [R9 + 0xE030], R1
+    HALT
+
+; R1 = tabla, R2 = primer frame, R12 = paginas. PTE R/X.
+fill_rx:
+    MOV R3, R2
+    OR R3, 0x15
+    MOV [R1], R3
+    ADD R1, 4
+    ADD R2, 0x1000
+    SUB R12, 1
+    JNZ fill_rx
+    RET
+
+; R1 = tabla, R2 = primer frame, R12 = paginas. PTE R/W/U.
+fill_rw:
+    MOV R3, R2
+    OR R3, 0x2D
+    MOV [R1], R3
+    ADD R1, 4
+    ADD R2, 0x1000
+    SUB R12, 1
+    JNZ fill_rw
+    RET
+
+; R1 = origen, R2 = destino, R3 = bytes.
+copy_bytes:
+    MOV.B R4, [R1]
+    MOV.B [R2], R4
+    ADD R1, 1
+    ADD R2, 1
+    SUB R3, 1
+    JNZ copy_bytes
+    RET
+
+.section .boot
+.org 0x80000000
+.entry boot
+boot:
+    MOV R9, 0x02000000
+
+    ; Copiar KERNEL de ROM (identidad) a su frame RAM.
+    MOV R1, [R9 + 0xE010]
+    MOV R2, 0x02020000
+    MOV R3, [R9 + 0xE014]
+boot_copy:
+    MOV.B R4, [R1]
+    MOV.B [R2], R4
+    ADD R1, 1
+    ADD R2, 1
+    SUB R3, 1
+    JNZ boot_copy
+
+    SFENCE.VMA
+    MOV R5, [R9 + 0xE018]
+    JMP R5
+
+.section .kernel
+.org 0x80001000
+.entry kmain
+kmain:
+    MOV R9, 0x02000000
+    MOV R1, 0x600D0001
+    MOV [R9 + 0xE030], R1
+
+    CSRR R1, STATUS
+    OR R1, 1
+    CSRW STATUS, R1
+    HALT

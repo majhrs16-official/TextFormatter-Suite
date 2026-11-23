@@ -43,7 +43,7 @@ class AssemblerRomIntegrationTest {
 
         assertEquals(4, image.header().tocCount());
         assertEquals(4, image.segments().size());
-        assertEquals(0, image.header().resetVector());
+        assertEquals(0x1000, image.header().resetVector());
         assertTrue(image.segment(RomSegmentType.BIOS).isPresent());
         assertTrue(image.segment(RomSegmentType.BOOT).isPresent());
         assertTrue(image.segment(RomSegmentType.KERNEL).isPresent());

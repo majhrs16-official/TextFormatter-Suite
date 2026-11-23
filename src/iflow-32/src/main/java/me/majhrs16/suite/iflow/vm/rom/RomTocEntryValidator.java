@@ -37,13 +37,14 @@ final class RomTocEntryValidator {
     }
 
     private static void validateBios(TocEntry entry, long load, long end) {
-        if (load != 0
+        if (load != u(entry.offset())
                 || end > RomParser.ROM_END
                 || !entry.readable()
                 || !entry.executable()
                 || entry.writable()
                 || entry.userAccessible()) {
-            throw new InvalidRomException("BIOS must be at 0x00000000, R/X and supervisor-only");
+            throw new InvalidRomException(
+                    "BIOS must be mapped at its ROM offset, R/X and supervisor-only");
         }
     }
 

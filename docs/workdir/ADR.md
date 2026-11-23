@@ -1,6 +1,6 @@
 # ADR — TextFormatter Suite v1.0 (pre-release)
 
-Fecha: 2026-08-14 · Estado: aceptado (pre-release, sin versión estable) · Última actualización: 2026-11-16
+Fecha: 2026-08-14 · Estado: aceptado (pre-release, sin versión estable) · Última actualización: 2026-11-22
 
 > **Documento vivo:** se actualiza en el mismo cambio que introduce una decisión de arquitectura.
 > Solo conserva decisiones vigentes; el historial cerrado, las fases y el estado operativo viven en
@@ -2437,8 +2437,10 @@ handle válido o 0xFFFF_FFFF. `FLAGS` solo escribe los bits 0–3.
    - `0x0100_0000`–`0x01FF_FFFF`: MMIO de 16 MiB, supervisor, decodificado **antes** de la MMU.
    - `0x0200_0000`–`0x7FFF_FFFF`: espacio de usuario, hasta ~2 GiB.
    - `0x8000_0000`–`0xFFFF_FFFF`: espacio de kernel, 2 GiB.
-   - `resetVector = 0x0000_0000`. Las pilas iniciales son `0x7FFF_F000` (usuario) y
-     `0xFFFF_F000` (kernel), con una página de guarda no mapeada debajo; el kernel las mapea.
+   - El contenedor ROM se mapea en `0x0000_0000`; `resetVector` apunta al offset físico
+     4 KiB-alineado donde empieza el payload BIOS, después de cabecera y TOC (no a `0`). Las
+     pilas iniciales son `0x7FFF_F000` (usuario) y `0xFFFF_F000` (kernel), con una página de
+     guarda no mapeada debajo; el kernel las mapea.
 2. La ROM física ocupa `0x0000_0000`–`0x00FF_FFFF`; el MMIO físico ocupa
    `0x0100_0000`–`0x01FF_FFFF`; la RAM física empieza en `0x0200_0000` y tiene `RAM_SIZE` bytes.
    Cualquier acceso físico fuera de esas regiones es `BUS_ERROR`. La ROM física es de solo lectura:
@@ -2792,11 +2794,14 @@ handle válido o 0xFFFF_FFFF. `FLAGS` solo escribe los bits 0–3.
    `offset >= 80 + tocCount*64`, `offset + size <= romSize` y no solapa cabecera, TOC ni firma;
    `loadAddress + memSize` no desborda 32 bits; segmentos sin solaparse en ROM ni en memoria
    virtual; `size > 0`; `memSize >= size`; hash de segmento distinto de cero; `entryPoint` dentro
-   del segmento si `X`; `resetVector` dentro del segmento BIOS y ejecutable. Solo los primeros
-   `romSize` bytes de la ventana ROM se mapean en `0x0000_0000` con permisos R/X y `U = 0`; la
-   última página se zero-fill hasta 4 KiB y los demás segmentos se copian a su `loadAddress` con
-   los flags de la TOC y zero-fill hasta `memSize`.
-5. Reglas por tipo: BIOS en `0x0000_0000`, R/X, supervisor; BOOT/KERNEL en `0x8000_0000`–
+   del segmento si `X`; `resetVector` dentro del segmento BIOS y ejecutable; el `offset` del BIOS
+   es igual a su `loadAddress`, ambos 4 KiB-alineados y posteriores a cabecera y TOC. El host solo
+   mapea los primeros `romSize` bytes del contenedor en `0x0000_0000` con permisos R/X y `U = 0`;
+   la última página se zero-fill hasta 4 KiB. BIOS, BOOT, KERNEL y PROGRAM se leen de la ROM por
+   TOC; el guest copia a RAM los segmentos que necesite con los flags de la TOC y zero-fill hasta
+   `memSize`. El host no reconstruye page tables ni copia todos los segmentos.
+5. Reglas por tipo: BIOS en el offset alineado tras cabecera y TOC (`loadAddress == offset`),
+   R/X, supervisor; BOOT/KERNEL en `0x8000_0000`–
    `0xFFFF_FFFF`, R/X o R/W, supervisor; PROGRAM en `0x0200_0000`–`0x7FFF_FFFF`, `U = 1`, R/X y
    `W = 0`; DATA es para firmware/kernel, no para programas; FONT/CONFIG son datos. `W && X` se
    rechaza. El flag `W` de la TOC de un `PROGRAM` debe ser 0: los permisos de datos/bss salen de
@@ -2830,7 +2835,8 @@ handle válido o 0xFFFF_FFFF. `FLAGS` solo escribe los bits 0–3.
 
 ### 9. Arranque y carga de programas
 
-1. El host valida la ROM, la mapea físicamente y arranca en `resetVector` con MMU apagada, `S`,
+1. El host valida la ROM, la mapea físicamente y arranca en `resetVector` (offset del payload
+   BIOS, no en `0`) con MMU apagada, `S`,
    interrupciones deshabilitadas y registros de §1.8. Cada core arranca con su `COREID`; el core 0
    es el boot core y hace POST: pila, `TVEC`, PIC, timer, NVRAM, display, page tables y `SYSINFO`;
    los cores 1..N-1 esperan la liberación del kernel en `HALT` o en una espera cooperativa y no
@@ -2875,7 +2881,7 @@ handle válido o 0xFFFF_FFFF. `FLAGS` solo escribe los bits 0–3.
 | Preguntas | Decisión |
 |---|---|
 | 1 | La máquina v3 **reemplaza** a la v2; no hay targets conviviendo. |
-| 2 | ROM en `0x0000_0000`; `resetVector = 0x0000_0000`. |
+| 2 | El contenedor ROM se mapea en `0x0000_0000`; `resetVector` es el offset 4 KiB-alineado del payload BIOS tras cabecera y TOC. |
 | 3 | 64 MiB por defecto; 16 MiB–1 GiB configurable; 4 GiB máximo arquitectónico. |
 | 4 | Páginas de 4 KB, dos niveles 10+10+12; sin páginas grandes en v3.0. |
 | 5 | Compresión de frames **fuera** de v3.0; se medirá antes de proponerla. |

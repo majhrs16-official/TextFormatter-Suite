@@ -195,7 +195,7 @@ class RomParserTest {
 
     @Test
     void rejectsResetVectorOutsideBios() {
-        assertInvalid(rom -> RomFixture.putU32(rom, 24, RomFixture.PAGE));
+        assertInvalid(rom -> RomFixture.putU32(rom, 24, 2L * RomFixture.PAGE));
     }
 
     @Test
@@ -302,11 +302,11 @@ class RomParserTest {
     }
 
     @Test
-    void rejectsBiosOutsideZero() {
+    void rejectsBiosNotMappedAtItsRomOffset() {
         byte[] rom = RomFixture.minimal();
         int entry = RomFixture.tocEntryOffset(rom, RomFixture.tocIndex(rom, RomSegmentType.BIOS));
-        RomFixture.putU32(rom, entry + 12, 0x1000);
-        RomFixture.putU32(rom, entry + 16, 0x1000);
+        RomFixture.putU32(rom, entry + 12, 0x2000);
+        RomFixture.putU32(rom, entry + 16, 0x2000);
         RomFixture.fixGlobalHash(rom);
         assertInvalid(rom);
     }

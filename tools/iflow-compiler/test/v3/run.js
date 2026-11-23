@@ -78,7 +78,7 @@ function bytesOf(source, options = {}) {
 function minimalRom(extra = '') {
   return `
 .section .bios
-.org 0x00000000
+.org 0x00001000
 .entry start
 start:
   MOV R0, 0
@@ -156,7 +156,7 @@ test('builds a valid three-segment ROM with hashes and reset vector', () => {
   assert.strictEqual(u16(rom, 12), 3);
   assert.strictEqual(u16(rom, 14), 80);
   assert.strictEqual(u32(rom, 20), rom.length);
-  assert.strictEqual(u32(rom, 24), 0);
+  assert.strictEqual(u32(rom, 24), 0x1000);
   assert.strictEqual(u32(rom, 28), 80);
   assert.strictEqual(u16(rom, 32), 3);
   assert.strictEqual(u16(rom, 34), 64);
@@ -178,6 +178,10 @@ test('builds a valid three-segment ROM with hashes and reset vector', () => {
     assert.ok(offset >= 80 + 3 * 64);
     assert.ok(offset >= previousOffset);
     assert.strictEqual(offset % 16, 0);
+    if (segment.type === 1) {
+      assert.strictEqual(offset, segment.loadAddress,
+        'BIOS must be mapped at its execution address');
+    }
     previousOffset = offset + segment.bytes.length;
     assert.strictEqual(u32(rom, toc + 8), segment.bytes.length);
     assert.strictEqual(u32(rom, toc + 12), segment.loadAddress);
@@ -194,7 +198,7 @@ test('builds a valid three-segment ROM with hashes and reset vector', () => {
 test('resolves labels, data words and align in the emitted bytes', () => {
   const source = `
 .section .bios
-.org 0x00000000
+.org 0x00001000
 .entry start
 start:
   JMP done
@@ -221,7 +225,7 @@ kmain:
   assert.strictEqual(bios[3], 1);
   assert.strictEqual(bios[7], 0xaa);
   const target = result.symbols.find(s => s.name === 'target').address;
-  assert.strictEqual(target, 17);
+  assert.strictEqual(target, 0x1011);
   assert.strictEqual(u32(Buffer.from(bios), 8), target);
   assert.strictEqual(u16(Buffer.from(bios), 12), 0x1234);
   assert.strictEqual(Buffer.from(bios).subarray(14, 17).toString('ascii'), 'ok\0');
@@ -252,7 +256,7 @@ main:
 test('rejects a ROM without the required KERNEL segment', () => {
   assert.throws(() => bytesOf(`
 .section .bios
-.org 0
+.org 0x1000
 start: NOP
 .section .boot
 .org 0x80000000
@@ -290,10 +294,24 @@ kmain: NOP
 `), error => error instanceof AssemblyError && /4 KiB aligned/.test(error.message));
 });
 
+test('requires the BIOS at its aligned ROM offset', () => {
+  assert.throws(() => bytesOf(`
+.section .bios
+.org 0x00000000
+start: NOP
+.section .boot
+.org 0x80000000
+boot: NOP
+.section .kernel
+.org 0x80001000
+kmain: NOP
+`), error => error instanceof AssemblyError && /BIOS must load at or above/.test(error.message));
+});
+
 test('rejects W+X sections', () => {
   assert.throws(() => bytesOf(`
 .section .bios
-.org 0
+.org 0x1000
 .flags R|W|X
 start: NOP
 .section .boot
@@ -419,7 +437,7 @@ payload:
 
   assert.throws(() => bytesOf(`
 .section .bios
-.org 0
+.org 0x1000
 .flags R|W
 start: NOP
 .section .boot
@@ -432,7 +450,7 @@ kmain: NOP
 
   assert.throws(() => bytesOf(`
 .section .bios
-.org 0
+.org 0x1000
 start: NOP
 .section .boot
 .org 0x1000
@@ -444,7 +462,7 @@ kmain: NOP
 
   assert.throws(() => bytesOf(`
 .section .bios
-.org 0
+.org 0x1000
 start: NOP
 .section .boot
 .org 0x80000000
@@ -486,7 +504,7 @@ test('rejects invalid directives and section placement', () => {
 test('applies .space, .align padding and UTF-8 strings', () => {
   const source = `
 .section .bios
-.org 0
+.org 0x1000
 .entry start
 start:
   .byte 0xaa
@@ -538,7 +556,7 @@ test('reuses the assembler instance and honors .reset', () => {
 
   const reset = assembler.assemble(`
 .section .bios
-.org 0
+.org 0x1000
 .entry start
 start: NOP
 alt: NOP
@@ -550,7 +568,7 @@ boot: NOP
 kmain: NOP
 .reset alt
 `, 'reset.flowasm');
-  assert.strictEqual(reset.resetVector, 3);
+  assert.strictEqual(reset.resetVector, 0x1003);
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);
