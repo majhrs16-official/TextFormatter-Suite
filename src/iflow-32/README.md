@@ -1,11 +1,11 @@
 # iflow-32 — VM de 32 bits (núcleo v3)
 
-> **Estado:** núcleo v3 aislado (331 tests); V3-1 (tiempo, quantum y watchdog configurable)
+> **Estado:** núcleo v3 aislado (335 tests); V3-1 (tiempo, quantum y watchdog configurable)
 > implementado; V3-2 completado (`CORE_COUNT` 1..64, `COREID`, `SYSINFO`, atómicas, PIC por core,
 > IPI, `TARGET`, vista `CoreMemory` por core, `MachineRuntime` por core, journal concurrente por
 > mensaje, backend `.flowasm` v3 `iflow-as -f iflow-32` con ROM `FLOWROM` v3/`PRG3` y kernel guest
-> con scheduler, IPI y TLB shootdown); faltan la persistencia entre mensajes y la integración con
-> el hub.
+> con scheduler, IPI y TLB shootdown); V3-3 completado (snapshot COW, apagado y reinicio en
+> frío con NVRAM persistente). Falta la integración con el hub.
 >
 > Este módulo implementa el contrato de ADR-037: ISA v3 de 32 bits, MMU paginada, bus MMIO,
 > dispositivos, PIC/timer y ABI `HOST` v3. No comparte núcleo, decoder, MMU, formato ROM ni ABI con
@@ -87,8 +87,8 @@ la configuración del módulo.
 - El espacio de direcciones es de 32 bits (máximo arquitectónico 4 GiB); la RAM física configurable
   de ADR-037 es 16 MiB–1 GiB.
 - No acepta el `.flow` de `iflow-16`; esa línea pertenece a ese módulo.
-- V3 sigue abierta: falta la persistencia entre mensajes. V3-1 cubre reloj, quantum de preempción,
-  watchdog de paso configurable y sleep/wake. V3-2 está completado: `CoreCountConfig`, `COREID`
+- V3 está completado: reloj, quantum, watchdog, multinúcleo y persistencia. V3-1 cubre reloj,
+  quantum de preempción, watchdog de paso configurable y sleep/wake. V3-2 está completado: `CoreCountConfig`, `COREID`
   (`0x10A`, RO), `SYSINFO.CORE_COUNT`, `FEATURES` bit 6 y las atómicas `LR.W`/`SC.W`/`AMOADD.W`/
   `AMOSWAP.W`/`AMOAND.W`/`AMOOR.W` con reserva por core, invalidación por trap y rechazo de MMIO.
   También entrega el PIC con banco por core, `SOFT_IRQ` con línea/destino (IPI y broadcast) y
@@ -103,7 +103,10 @@ la configuración del módulo.
   `iflow-32` de `iflow-as`) entrega secciones tipadas, directivas, encoder completo, ROM `FLOWROM`
   v3 y `PRG3`; `RomParser` acepta la ROM emitida y `InstructionDecoder` la decodifica. El kernel
   guest valida el scheduler con cola `AMOADD.W`, la IPI broadcast de línea 16, `SFENCE.VMA` y el
-  TLB shootdown, y los secundarios esperan la liberación con `HALT` y una IPI. Falta la
-  persistencia entre mensajes. `CORE_COUNT` 1..64 está habilitado.
+  TLB shootdown, y los secundarios esperan la liberación con `HALT` y una IPI. `MachineRuntime`
+  conserva RAM, registros, timer y page tables entre slices y mensajes mientras la VM sigue
+  encendida; `snapshotMemory()` toma un snapshot COW por frame solo con todos los cores detenidos y
+  rechaza la operación si alguno ejecuta, `powerOff()` devuelve únicamente la NVRAM confirmada y
+  `coldReset()` limpia RAM y registros conservando esa NVRAM. `CORE_COUNT` 1..64 está habilitado.
 - Todavía no está cableado al hub ni tiene `ModuleActivator` propio. El motor v2
   (`VmPolicyEngine`/`VmConfigLoader`/`Iflow16Activator`) no forma parte de esta línea.

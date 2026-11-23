@@ -2532,9 +2532,8 @@ handle válido o 0xFFFF_FFFF. `FLAGS` solo escribe los bits 0–3.
    de máquina; cada uno tiene su estado arquitectónico. El scheduler de procesos es software del
    kernel guest; el host solo crea los cores, impone quantum por core y watchdog de paso
    configurable, y no decide qué proceso corre en cada uno. El detalle de coherencia, atómicas,
-   IPI, arranque y journal está en §6.1. La implementación es **V3-2**; hasta que exista, `N > 1`
-   falla explícitamente
-   (`UNSUPPORTED`/`RESTART_REQUIRED`) y no se degrada a un solo core en silencio.
+   IPI, arranque y journal está en §6.1. V3-2 implementa ese mínimo y habilita `N > 1`; no hay
+   degradación silenciosa a un solo core.
 5. **Quantum de host por core (preempción, no fuel):** 1.000.000 de instrucciones o 50 ms de
    ejecución de guest por core y por slice, lo que ocurra primero, configurable. Al agotarse, el
    host recupera el control y devuelve `PREEMPTED`; **no es un fallo, no termina el mensaje, no
@@ -2965,9 +2964,9 @@ V1 se cierra con este ADR. V2–V5 deben demostrar, como mínimo:
    límites; carga BIOS/boot/kernel/programa.
 7. Integración: un mensaje real atraviesa el pipeline con una política `.flow` v3 y produce el
    mismo resultado observable que el contrato de ADR-031/ADR-036, sin fuel y sin doble camino.
-8. Multinúcleo: `CORE_COUNT = 1` determinista; `CORE_COUNT > 1` solo se habilita con estado por
+8. Multinúcleo: `CORE_COUNT = 1` determinista; `CORE_COUNT > 1` exige estado por
    core, atómicas, IPI, TLB shootdown, MMIO/PIC por core, journal concurrente y watchdog de paso
-   configurable por core. Sin esas piezas, `CORE_COUNT > 1` falla explícito. `iflow-16` no
+   configurable por core. V3-2 entrega esas piezas y habilita el rango completo. `iflow-16` no
    implementa multinúcleo.
 
 ---

@@ -3,6 +3,8 @@ package me.majhrs16.suite.iflow.vm.execution.v3;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.IntFunction;
 
 import me.majhrs16.suite.iflow.vm.isa.v3.Cpu;
@@ -10,6 +12,7 @@ import me.majhrs16.suite.iflow.vm.isa.v3.HostHandler;
 import me.majhrs16.suite.iflow.vm.isa.v3.VirtualClock;
 import me.majhrs16.suite.iflow.vm.memory.v3.CoreMemory;
 import me.majhrs16.suite.iflow.vm.memory.v3.MachineMemory;
+import me.majhrs16.suite.iflow.vm.memory.v3.PhysicalMemory;
 
 /**
  * Host-side vCPU set of one v3 VM.
@@ -29,8 +32,14 @@ public final class MachineRuntime {
     private final MachineMemory memory;
     private final VirtualClock clock;
     private final ExecutionQuantum quantum;
+    private final int resetVector;
     private final List<Core> cores;
+    private final ReentrantLock lifecycleLock = new ReentrantLock();
+    private final Condition coresIdle = lifecycleLock.newCondition();
     private boolean faulted;
+    private boolean stopped;
+    private boolean lifecycleBusy;
+    private int activeCores;
 
     public MachineRuntime(MachineMemory memory,
                           VirtualClock clock,
@@ -50,6 +59,7 @@ public final class MachineRuntime {
         this.memory = Objects.requireNonNull(memory, "memory");
         this.clock = Objects.requireNonNull(clock, "clock");
         this.quantum = Objects.requireNonNull(quantum, "quantum");
+        this.resetVector = resetVector;
         Objects.requireNonNull(watchdog, "watchdog");
         Objects.requireNonNull(hostHandlers, "hostHandlers");
         Objects.requireNonNull(nanoClock, "nanoClock");
@@ -86,6 +96,11 @@ public final class MachineRuntime {
         return faulted;
     }
 
+    /** @return {@code true} si la VM se apagó de forma ordenada. */
+    public boolean stopped() {
+        return stopped;
+    }
+
     public Core core(int coreId) {
         if (coreId < 0 || coreId >= cores.size()) {
             throw new IllegalArgumentException(
@@ -104,19 +119,162 @@ public final class MachineRuntime {
 
     public ExecutionReport runCore(int coreId, ExecutionQuantum slice) {
         Objects.requireNonNull(slice, "slice");
-        if (faulted) {
-            throw new IllegalStateException("VM is FAULTED; restart is required");
+        enterExecution(coreId);
+        try {
+            Core core = core(coreId);
+            ExecutionReport report = core.engine.run(slice);
+            if (report.status() == ExecutionStatus.WATCHDOG) {
+                core.faulted = true;
+                faulted = true;
+            }
+            return report;
+        } finally {
+            leaveExecution();
         }
-        Core core = core(coreId);
-        if (core.faulted) {
-            throw new IllegalStateException("COREID " + coreId + " is FAULTED");
+    }
+
+    /**
+     * Takes a copy-on-write snapshot of physical memory once every core is halted.
+     *
+     * <p>Lifecycle operations never overlap execution: new slices are rejected while the snapshot
+     * runs, and the call waits for in-flight slices on other cores. Running cores are never
+     * snapshotted. The returned memory shares frames with the live machine until either side
+     * writes them.</p>
+     */
+    public PhysicalMemory snapshotMemory() {
+        lifecycleLock.lock();
+        try {
+            requireStopped(false);
+            lifecycleBusy = true;
+            try {
+                awaitIdleCores();
+                requireAllCoresHalted();
+                if (faulted) {
+                    throw new IllegalStateException("VM is FAULTED; restart is required");
+                }
+                return memory.physical().snapshot();
+            } finally {
+                lifecycleBusy = false;
+            }
+        } finally {
+            lifecycleLock.unlock();
         }
-        ExecutionReport report = core.engine.run(slice);
-        if (report.status() == ExecutionStatus.WATCHDOG) {
-            core.faulted = true;
-            faulted = true;
+    }
+
+    /**
+     * Powers the VM off in an orderly way and returns the committed NVRAM bytes.
+     *
+     * <p>Only NVRAM survives the power cycle; RAM, registers, timer and page tables are discarded
+     * on the next {@link #coldReset()}. The call requires every core to be halted or faulted and
+     * waits for in-flight slices.</p>
+     */
+    public byte[] powerOff() {
+        lifecycleLock.lock();
+        try {
+            requireStopped(false);
+            lifecycleBusy = true;
+            try {
+                awaitIdleCores();
+                requireAllCoresHalted();
+                stopped = true;
+                return memory.nvram().persistentBytes();
+            } finally {
+                lifecycleBusy = false;
+            }
+        } finally {
+            lifecycleLock.unlock();
         }
-        return report;
+    }
+
+    /**
+     * Cold-resets the machine after the cores stop: clears RAM, resets every vCPU to the reset
+     * vector and keeps only the committed NVRAM.
+     */
+    public void coldReset() {
+        lifecycleLock.lock();
+        try {
+            lifecycleBusy = true;
+            try {
+                awaitIdleCores();
+                requireAllCoresHalted();
+                memory.reset();
+                for (Core core : cores) {
+                    core.cpu.reset(resetVector);
+                    core.faulted = false;
+                }
+                faulted = false;
+                stopped = false;
+            } finally {
+                lifecycleBusy = false;
+            }
+        } finally {
+            lifecycleLock.unlock();
+        }
+    }
+
+    private void enterExecution(int coreId) {
+        lifecycleLock.lock();
+        try {
+            if (stopped) {
+                throw new IllegalStateException("VM is STOPPED; restart is required");
+            }
+            if (faulted) {
+                throw new IllegalStateException("VM is FAULTED; restart is required");
+            }
+            if (lifecycleBusy) {
+                throw new IllegalStateException("VM lifecycle operation in progress");
+            }
+            Core core = core(coreId);
+            if (core.faulted) {
+                throw new IllegalStateException("COREID " + coreId + " is FAULTED");
+            }
+            activeCores++;
+        } finally {
+            lifecycleLock.unlock();
+        }
+    }
+
+    private void leaveExecution() {
+        lifecycleLock.lock();
+        try {
+            activeCores--;
+            if (activeCores == 0) {
+                coresIdle.signalAll();
+            }
+        } finally {
+            lifecycleLock.unlock();
+        }
+    }
+
+    private void awaitIdleCores() {
+        boolean interrupted = false;
+        while (activeCores > 0) {
+            try {
+                coresIdle.await();
+            } catch (InterruptedException error) {
+                interrupted = true;
+            }
+        }
+        if (interrupted) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    private void requireStopped(boolean expected) {
+        if (stopped != expected) {
+            throw new IllegalStateException(expected
+                    ? "VM is RUNNING; power off first"
+                    : "VM is STOPPED; restart is required");
+        }
+    }
+
+    private void requireAllCoresHalted() {
+        for (Core core : cores) {
+            if (!core.cpu.halted() && !core.faulted) {
+                throw new IllegalStateException(
+                        "COREID " + core.id + " is still running; lifecycle operation aborted");
+            }
+        }
     }
 
     /** Architectural view and host execution state of one core. */
