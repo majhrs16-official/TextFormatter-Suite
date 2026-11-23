@@ -21,9 +21,20 @@ dependencies {
     implementation project(':src:core-api')
     implementation 'org.yaml:snakeyaml:2.2'
 
+    testImplementation project(':src:iflow-32')
     testImplementation platform('org.junit:junit-bom:5.10.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+// The iflow-32 policy ROM fixtures are shared as test resources so the hub
+// integration test boots the same bytes the engine tests assemble.
+sourceSets {
+    test {
+        resources {
+            srcDir project(':src:iflow-32').file('src/test/resources')
+        }
+    }
 }
 
 tasks.withType(JavaCompile).configureEach {

@@ -1,13 +1,15 @@
 # iflow-32 — VM de 32 bits (núcleo v3)
 
-> **Estado:** núcleo v3 aislado (337 tests); V3-1 (tiempo, quantum y watchdog configurable)
+> **Estado:** núcleo v3 aislado (340 tests); V3-1 (tiempo, quantum y watchdog configurable)
 > implementado; V3-2 completado (`CORE_COUNT` 1..64, `COREID`, `SYSINFO`, atómicas, PIC por core,
 > IPI, `TARGET`, vista `CoreMemory` por core, `MachineRuntime` por core, journal concurrente por
 > mensaje, backend `.flowasm` v3 `iflow-as -f iflow-32` con ROM `FLOWROM` v3/`PRG3` y kernel guest
 > con scheduler, IPI y TLB shootdown); V3-3 completado (snapshot COW, apagado y reinicio en
 > frío con NVRAM persistente); V4 loader slice completado (el kernel guest carga el `PROGRAM`,
-> mapea `W^X`, entra en modo usuario y ejecuta `HOST MESSAGE_ID` y `HOST ROUTE_DECISION`). Falta
-> el resto de V4: varios programas, load addresses arbitrarias y la integración con el hub.
+> mapea `W^X`, entra en modo usuario y ejecuta `HOST MESSAGE_ID` y `HOST ROUTE_DECISION`); V4
+> hub/Router slice completado (`Iflow32Activator`, `Iflow32Router` y `V3HostBridge`: una política
+> `.flow` real decide por `message.content` y el hub obtiene un `RouteOutcome`). Falta el resto de
+> V4: kernel persistente con mailbox, varios programas y load addresses arbitrarias.
 >
 > Este módulo implementa el contrato de ADR-037: ISA v3 de 32 bits, MMU paginada, bus MMIO,
 > dispositivos, PIC/timer y ABI `HOST` v3. No comparte núcleo, decoder, MMU, formato ROM ni ABI con
@@ -27,7 +29,12 @@
   en el kernel y el quantum no es fuel ni un límite total de ejecución.
 - `host/v3`: envelope TLV, identidad, capacidades y puente de servicios `HostBridge`; `HostAbi`
   abre un `HostContext` por `MIDENT` y `MessageJournal` conserva el write set provisional y el
-  latch único de `ROUTE_DECISION` hasta el commit o aborto de la unidad.
+  latch único de `ROUTE_DECISION` hasta el commit o aborto de la unidad. `V3HostBridge` resuelve el
+  vocabulario `scope`/`property` de ADR-037 §7.14 contra la unidad abierta, aplica el write set como
+  lote atómico y traduce `ROUTE_DECISION` a la decisión del host.
+- `engine/v3`: `Iflow32Router` implementa `Router`; carga `policy.flow`, arranca la VM v3 por
+  mensaje y mapea `DELIVER`→`LOG`, `CANCEL_EVENT`→`DROP` y `ERROR`→`REJECT`. `Iflow32Activator`
+  publica el router y el `IflowBackend` `iflow-32` para el hub.
 
 ## Tiempo y ejecución
 
@@ -81,8 +88,14 @@ Un archivo ausente mantiene el watchdog activo y un único core. Un valor que no
 raíz que no sea mapa o una versión ausente/incorrecta fallan de forma explícita. Desactivar el
 watchdog registra un `warn`, no cambia el quantum y deja sin recuperación un `cpu.step()` que no
 retorne. `core-count` acepta el rango arquitectónico completo 1..64: el host crea un vCPU por core
-y el kernel guest decide qué se ejecuta en cada uno. El activador de V4 conectará ambos cargadores a
-la configuración del módulo.
+y el kernel guest decide qué se ejecuta en cada uno. `Iflow32Activator` carga ambos ajustes al
+activar el módulo.
+
+El router exige además `config/iflow-32/policy.flow`, una ROM `FLOWROM` v3 con BIOS, BOOT y KERNEL
+más exactamente un `PROGRAM` de política. `RomParser` valida cabecera, TOC, `PRG3`, SHA-256 y
+capacidades; si el archivo falta, está corrupto o declara cero o varios programas, el backend se
+publica como no disponible, el hub aplica su política y cada ruta falla con `REJECT` y el motivo
+explícito. No hay política por defecto ni ROM embebida.
 
 ## Límites actuales
 
@@ -110,18 +123,24 @@ la configuración del módulo.
   encendida; `snapshotMemory()` toma un snapshot COW por frame solo con todos los cores detenidos y
   rechaza la operación si alguno ejecuta, `powerOff()` devuelve únicamente la NVRAM confirmada y
   `coldReset()` limpia RAM y registros conservando esa NVRAM. `CORE_COUNT` 1..64 está habilitado.
-- Todavía no está cableado al hub ni tiene `ModuleActivator` propio. El motor v2
-  (`VmPolicyEngine`/`VmConfigLoader`/`Iflow16Activator`) no forma parte de esta línea.
+- `Iflow32Router` está cableado al hub: publica `Router`/`IflowBackend` con nombre `iflow-32` y no
+  participa en el fallback de 16 bits. El motor v2 (`VmPolicyEngine`/`VmConfigLoader`/
+  `Iflow16Activator`) no forma parte de esta línea.
+- Ciclo de vida del slice actual: el kernel guest acepta **un solo** `PROGRAM` y termina tras su
+  salida, así que el router arranca la VM para cada mensaje y hace `coldReset()` entre unidades
+  (NVRAM intacta). Es un reinicio del kernel, no una reutilización. Un fallo de ROM, un trap, el
+  watchdog o una política sin decisión producen `REJECT` explícito; si tras un fault no es posible
+  el reinicio en frío, las rutas siguientes responden `RESTART_REQUIRED` hasta `reload()`.
 - V4 loader slice: el kernel guest acepta **un solo** `PROGRAM` en `0x02500000` con
   `memSize <= 64 KiB` y datos alineados a página después del código. Valida magic/estructura
   `PRG3`, copia el segmento a `0x02800000`, zero-fill hasta `memSize`, mapea código `R/X/U`,
   datos/bss y pila `R/W/U` (sin `W && X` por página) y entra en U con `PIDENT` 0 y `MIDENT` 1.
   Los datos y el bss deben empezar en páginas posteriores al código; si comparten la última
   página de código, el loader falla con `BAD0000A` en vez de degradar `W^X`.
-  El programa llama a `HOST MESSAGE_ID` y a `HOST ROUTE_DECISION` (`DELIVER`); la decisión vive
-  en el journal del mensaje y solo se aplica al bridge cuando el host hace `commitExecution`.
+  El programa llama a `HOST` para leer propiedades y emitir `ROUTE_DECISION`; la decisión vive en
+  el journal del mensaje y solo se aplica al bridge cuando el host hace `commitExecution`.
   El host sigue siendo el único que verifica SHA-256 y nombres de capacidad (`RomParser`); el
   guest revalida los rangos que consume. Más de un programa, otra `loadAddress`, `memSize`
   mayor o datos que compartan página con código fallan con un marcador `BADxxxxxx` explícito,
-  sin relocación ni fallback. Los programas múltiples y el scheduler de procesos quedan
-  pendientes en V4.
+  sin relocación ni fallback. El kernel persistente con mailbox, los programas múltiples, las
+  load addresses arbitrarias y el scheduler de procesos quedan pendientes en V4.

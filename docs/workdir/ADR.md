@@ -2740,6 +2740,17 @@ handle válido o 0xFFFF_FFFF. `FLAGS` solo escribe los bits 0–3.
     un mensaje ni el número de slices. Si un mensaje se retrasa, la política de admisión, cola y
     backoff es del kernel/userspace guest. La única cota de pared de una llamada `HOST` es el
     timeout explícito de su acción.
+14. **Vocabulario de `scope`/`property`.** Los argumentos son cadenas canónicas; no hay ids
+    numéricos v2, alias ni despacho dual. Los pares admitidos son:
+    - `message`: `content`, `langSource`, `langTarget`, `colorMode`, `formatPapi`, `translate`
+      (lectura/escritura), y `channel`, `direction`, `type` (solo lectura).
+    - `emitter` y `recipient`: `name`, `uuid`, `language` (solo lectura).
+    - `channel`: `name`, `rate`, `sendPolicy`, `receivePolicy` (solo lectura).
+    Un par desconocido se lee como ausencia (`present = false`) y `PROPERTY_EXISTS` devuelve
+    `false`; `PROPERTY_WRITE` sobre un par desconocido devuelve `NOT_FOUND` y sobre uno conocido de
+    solo lectura, `DENIED`. Los valores son TLV estrictos: texto, idioma y color como `STRING`
+    válida y los booleanos como `BOOL`; un tipo incorrecto es `INVALID_ARGUMENT`. El host aplica el
+    write set como un lote atómico al commitear `DELIVER` y no aplica ningún byte si el lote falla.
 
 ### 8. Formato ROM v3 (`.flow`)
 
