@@ -63,6 +63,7 @@ Si el ADR y el PLAN se contradicen, o el código no permite cumplirlos, detente 
 ## Gate
 
 ```sh
+export JAVA_HOME=/opt/javac/x64/21
 ./gradlew build checkArchitecture checkLocks --no-daemon
 ```
 

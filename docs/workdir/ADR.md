@@ -7,15 +7,8 @@ Fecha: 2026-08-14 · Estado: aceptado (pre-release, sin versión estable) · Úl
 > `PLAN.md` y en Git. Este documento no mantiene roadmaps, tablas de estado ni registros de
 > implementación.
 >
-> **Régimen pre-1.0 (ADR-034, 2026-11-04):** no existe versión estable ni producción. Todos los
-> módulos, componentes, contratos y configuraciones se alinean a la base `1.0`; los números `2.x`,
-> `3.x` y superiores del historial son etiquetas de iteración, no versiones publicadas. No se
-> mantiene retrocompatibilidad de features ni contratos, ni código de compatibilidad; los módulos
-> legacy independientes se declaran explícitamente. `1.0.0` es la etiqueta de release de la base
-> integrada; el betatesting/E2E real se ejecuta **después** y sus fallos se corrigen en la línea
-> beta. `1.0` es la versión estable, declarada solo cuando el proyecto completo está consolidado y
-> sin errores críticos de diseño. Ver `docs/prompts/contexto/philosophy.md` §0 y `PLAN.md` «Purga
-> pre-1.0».
+> **Régimen pre-1.0:** ver ADR-034. `1.0.0` es la etiqueta de release de la base integrada; el
+> betatesting/E2E real se ejecuta después y sus fallos se corrigen en la línea beta.
 
 ## Contexto
 
@@ -185,6 +178,8 @@ se lee dentro del intérprete, no como estructura de paquetes.
 
 **Estado:** Aceptada (2026-10-19).
 
+**Ámbito:** esta ventana MMIO rige `iflow-16`. `iflow-32` se rige por ADR-037.
+
 **Decisión.** La apertura MMIO de dispositivos (256 B en `0x0F00–0x0FFF`) es espacio de
 dispositivo, no memoria: no se traduce ni se comprueba por privilegio, igual que la MMIO real. La
 protección por propiedad de página se mantiene para la memoria (ROM, constantes). El programa puede
@@ -218,7 +213,7 @@ exige documentación explícita; si en el futuro se quisiera exigir al menos un 
 
 ## ADR-019 — Reestructuración modular: runtime, ciclo de vida y adaptadores delgados
 
-**Estado:** Aceptada e implementada.
+**Estado:** Aceptada.
 
 **Decisión del usuario (2026-10-27).** No es un arreglo de dependencias: es una reestructuración de
 la arquitectura. El objetivo es hot unload/upgrade real. La solución no es empezar por el loader
@@ -497,7 +492,7 @@ validación que lo impida.
 
 ## ADR-021 — API de configuración y comandos jerárquicos registrables
 
-**Estado:** Aceptada e implementada (2026-10-29).
+**Estado:** Aceptada (2026-10-29).
 
 **Decisión.**
 
@@ -532,7 +527,7 @@ la superficie, no impone un formato de archivo.
 
 ## ADR-022 — Raíz de comandos relocalizable
 
-**Estado:** Aceptada e implementada (2026-10-29).
+**Estado:** Aceptada (2026-10-29).
 
 **Decisión.**
 
@@ -560,7 +555,7 @@ documentación y los mensajes deben usar `CommandContext.root()`.
 
 ## ADR-023 — Compilador C para iFlow VM
 
-**Estado:** Aceptada. Diseño congelado; implementación pendiente. El orden de trabajo vive en
+**Estado:** Aceptada. Diseño congelado. El orden de trabajo vive en
 `PLAN.md`. No se implementa contra el ISA v2 de 16 bits.
 
 **Contexto.** `tools/iflow-compiler/` solo ensambla `.flowasm` v2 a `.flow` v2. No hay frontend C,
@@ -628,7 +623,7 @@ es deuda explícita del proyecto; cada exclusión y limitación debe estar docum
 
 ## ADR-024 — Puerto neutral de renderizado enriquecido
 
-**Estado:** Aceptada e implementada (2026-10-30).
+**Estado:** Aceptada (2026-10-30).
 
 **Decisión.**
 
@@ -652,7 +647,7 @@ desde `ServiceRegistry` es responsabilidad de `suite-runtime`.
 
 ## ADR-025 — Adapters delgados sobre `SuiteRuntime`
 
-**Estado:** Aceptada e implementada (2026-10-30).
+**Estado:** Aceptada (2026-10-30).
 
 **Decisión.**
 
@@ -713,7 +708,7 @@ compartidas no se actualizan en caliente mientras estén en uso; el reinicio es 
 
 ## ADR-027 — Instalación por etapas y semántica de fallo
 
-**Estado:** Aceptada e implementada. Sustituye la secuencia de activación/rollback de ADR-026 y
+**Estado:** Aceptada. Sustituye la secuencia de activación/rollback de ADR-026 y
 retira `keepBoth` como mecanismo de recuperación automática.
 
 **Contexto.** El flujo anterior mezclaba red, commit de archivos y arranque. Un fallo de arranque
@@ -923,7 +918,7 @@ verificarla.
 
 ## ADR-028 — Etiqueta `<regex>` en plantillas de TextFormatter
 
-**Estado:** Aceptada e implementada.
+**Estado:** Aceptada.
 
 **Decisión.**
 
@@ -955,7 +950,7 @@ cargarse y no llega a producción.
 
 ## ADR-029 — Distribución reproducible y frontera de dependencias de terceros
 
-**Estado:** Aceptada e implementada. Complementa ADR-026 y ADR-027; no cambia las tres etapas de
+**Estado:** Aceptada. Complementa ADR-026 y ADR-027; no cambia las tres etapas de
 instalación ni la semántica de `ACTIVATION_FAILED`.
 
 **Decisión.**
@@ -993,7 +988,7 @@ comparación de hashes; `SHA256SUMS` se verifica con `sha256sum -c`.
 
 ## ADR-030 — Presets por comando y recarga de módulos activos
 
-**Estado:** Aceptada e implementada.
+**Estado:** Aceptada.
 
 **Decisión.**
 
@@ -1062,7 +1057,7 @@ de entrega implícita, `REDIRECT`, `processed` o `LOG`.
 
 ## ADR-032 — Hub `iflow` para seleccionar backend
 
-**Estado:** Aceptada e implementada.
+**Estado:** Aceptada.
 
 **Decisión.**
 
@@ -1101,7 +1096,7 @@ Cambiar la selección en caliente requiere que el hub refresque; los eventos
 
 ## ADR-033 — Router Wasm, SHA-256 del artefacto y hot-reload
 
-**Estado:** Aceptada e implementada.
+**Estado:** Aceptada.
 
 **Decisión.**
 
@@ -1135,8 +1130,8 @@ responsabilidades separadas y documentadas.
 ## ADR-034 — Régimen pre-1.0: versión base 1.0, rolling release y purga de compatibilidad
 
 **Estado:** Aceptada. La implementación de la purga y el reseteo de versiones se rastrea en
-`PLAN.md`, sección «Purga pre-1.0». Esta ADR sustituye cualquier política anterior de
-retrocompatibilidad, versiones ficticias o validación exclusivamente automatizada.
+`PLAN.md`. Esta ADR sustituye cualquier política anterior de retrocompatibilidad, versiones
+ficticias o validación exclusivamente automatizada.
 
 **Contexto.** TextFormatter Suite sigue en fase de diseño fundacional. No existe una versión
 estable, no hay producción y no hay una promesa de compatibilidad que sostener. El repositorio
@@ -1214,7 +1209,7 @@ contrato; los módulos legacy independientes se declaran como tales.
 
 ## ADR-035 — CoreTranslator como módulo legacy independiente
 
-**Estado:** Aceptada e implementada en `src/coretranslator` (2026-11-04).
+**Estado:** Aceptada (2026-11-04). El módulo vive en `src/coretranslator`.
 
 **Contexto.** `CoreTranslator` proviene del proyecto anterior ChatTranslator y se conserva por su
 utilidad como feature. No es una capa de compatibilidad dentro de otro módulo ni un shim: es una
@@ -1261,7 +1256,7 @@ la purga P0.4; se mantiene como feature legacy.
 en los puntos que se indican; adopta ADR-031 en la semántica de routing (§16 regula la exposición de
 `SET_CHANNEL` como acción agnóstica sin alterar D01–D05). §17 añade la selección de backend por
 mensaje y enmienda ADR-032/ADR-035 solo en esa selección: el default y el fallback del hub y de la
-fachada de traducción se conservan. La implementación se rastrea en `PLAN.md` (PL-1, PL-2 y PL-3).
+fachada de traducción se conservan. La implementación y su estado se rastrean en `PLAN.md`.
 
 **Contexto.** El diseño declara que todo feature es un paquete opcional, pero el composition root
 decide lo contrario en tiempo de ejecución. `SuiteRuntime.rebuildPipeline()` exige ocho servicios
@@ -2128,7 +2123,7 @@ entrega ni un namespace de `outputs`. Su backend de traducción se escribe `sync
 - **No promete** orden de finalización en modo paralelo, transacciones entre backends ni selección
   automática por salud. El modo secuencial es explícito.
 
-### Respuestas a las preguntas abiertas de `PLAN.md`
+### Resumen de decisiones del contrato
 
 | # | Pregunta | Decisión |
 |---|---|---|
@@ -2224,9 +2219,9 @@ recarga en caliente con plan inválido (conserva el anterior); despacho en vuelo
 
 ## ADR-037 — Contrato de máquina, ISA y ABI `HOST` v3 de `iflow-32`
 
-**Estado:** Aceptada y congelada (2026-11-14). Cierra V1. **Enmendada el 2026-11-16:** `iflow-32`
+**Estado:** Aceptada y congelada (2026-11-14). **Enmendada el 2026-11-16:** `iflow-32`
 es multinúcleo intra-VM; se añaden §1.9, §6.1 y §7.12, y se corrigen §4 (extensión atómica),
-§5.8/§5.9 (IPI y dispositivos), §6.4, §10 y §12. La implementación de multinúcleo es V3-2.
+§5.8/§5.9 (IPI y dispositivos), §6.4, §10 y §12.
 **Alcance (ADR-038, 2026-11-15):** este contrato rige el motor `iflow-32`; no prohíbe la línea
 separada `iflow-16`, que se rige por ADR-038 y conserva **un único vCPU por diseño**.
 
@@ -3107,100 +3102,3 @@ líneas.
 v3, no conserva alias de compatibilidad y no elimina `iflow-16` cuando `iflow-32` madure.
 
 ---
-
-## ADR-039 — Canal WebSocket de configuración en vivo, telemetría y relay ZIP E2EE
-
-**Estado:** Propuesta revisada (2026-11-16). No aceptada: no crea contrato vigente ni autoriza
-implementación. Origen: `docs/prompts/diseno/web-editor-transmission.md`, que no se modifica. El
-documento de origen la numera «ADR-0027», pero ese número ya pertenece a ADR-027; se registra como
-ADR-039. Plan asociado: PL-5 en `PLAN.md`. Esta revisión sustituye la anotación inicial centrada solo
-en el ZIP: el canal WebSocket pasa a ser la vía primaria de configuración en vivo y el ZIP queda como
-fallback offline.
-
-**Contexto.** El editor web importa y exporta la suite como ZIP local (PL-4). Se quiere configurar y
-observar servidores TextFormatter en caliente, sin backend autoalojado ni servicio de pago, y sin
-depender de un ZIP completo para cada cambio. Los canales de mensajería tradicionales imponen
-límites de payload y el ZIP se vuelve un transporte lento y obsoleto para cambios pequeños. La
-propuesta usa un canal WebSocket bidireccional, con brokers públicos o un endpoint directo del
-plugin Velocity, telemetría y un fallback ZIP offline.
-
-**Decisión propuesta.**
-
-1. **Hosts en configuración, nunca hardcodeados.** La lista de endpoints vive en
-   `config/web-editor/mirrors.yml`, relativa a la raíz de configuración, con
-   `config-version: 1.0`. El runtime Java y el editor no contienen hosts, puertos ni orden de
-   cascada incrustados. Se distribuye un archivo por defecto, se lee al iniciar y al recargar
-   configuración, y admite añadir, desactivar, reordenar o sustituir hosts, incluido un servidor
-   personalizado. Un archivo ausente o inválido falla de forma explícita; no se usa una lista de
-   emergencia hardcodeada.
-2. **Dos modos de canal.** `relay` usa brokers públicos MQTT sobre WebSocket con E2EE. `direct`
-   usa WSS contra el plugin Velocity de TextFormatterSuite. El modo, endpoint, prioridad y cascada
-   salen de `mirrors.yml`; el código no elige un host por su cuenta. El navegador bajo HTTPS solo
-   intenta WSS para evitar *mixed content*. El ZIP no es el protocolo primario del canal.
-3. **Sincronización incremental.** El canal transporta operaciones por archivo o ruta con hash o
-   versión base, no el ZIP completo. Solo viajan las partes relevantes: cambios de YAML, altas,
-   bajas, renombrados y consultas. La aplicación es atómica, conserva comentarios y formato del CST
-   y detecta conflictos de base. Un snapshot completo solo se usa para la primera carga o para una
-   exportación/importación explícita.
-4. **Acciones en caliente y telemetría.** El canal ofrece petición/respuesta y suscripciones para
-   consultar el estado vivo de la máquina iFlow, el consumo de CPU virtual por proceso, la RAM
-   virtual utilizada, los núcleos activos, el quantum/watchdog y el journal. También puede exponer
-   acciones explícitas de configuración o control, siempre con capacidades, autorización y
-   auditoría. Una métrica no soportada por el motor activo falla de forma explícita; no se inventa
-   ni se rellena con un valor falso.
-5. **Jerarquía multi servidor.** El editor muestra una lista seleccionable de servidores para
-   entornos de networking como Velocity o Bungee. En modo `direct`, el plugin Velocity actúa como
-   coordinador: conoce los servidores hijos, publica su topología y canaliza configuración y
-   telemetría de cada uno hacia la página. El ZIP normal contiene un solo servidor, pero el modelo
-   y el contenedor deben admitir una jerarquía multi servidor aunque la UI no la use al principio.
-   Bungee solo se soporta si se implementa de forma explícita; no se promete por analogía.
-6. **Seguridad y autorización.** En `relay` se mantiene AES-128-GCM con IV de 12 bytes y el código
-   de 48 hex; topic y clave siguen siendo un secreto portador. En `direct`, TLS no sustituye la
-   autenticación de aplicación. Consultar telemetría, editar configuración y ejecutar acciones de
-   control son permisos distintos, con fail-closed, auditoría y aislamiento entre servidores.
-7. **Fallback ZIP explícito.** Si el canal no está disponible, se usa la exportación/importación
-   ZIP local de PL-4. El fallback puede ser manual o automático, pero se reporta y nunca se presenta
-   como sincronización en vivo correcta. No hay éxito silencioso ni se oculta el fallo remoto.
-8. **ZIP de uno o varios servidores.** El ZIP normal representa un servidor, pero el esquema debe
-   admitir una jerarquía multi servidor. El formato exacto del contenedor queda pendiente; no se
-   añade un lector doble ni se reinterpreta un ZIP de un servidor como si fuera multi servidor.
-
-**Consecuencias.**
-
-- Positivas: cambios en caliente, menos ancho de banda, telemetría operativa, selección de servidor
-  y coordinación centralizada desde Velocity sin backend propio.
-- Negativas: protocolo bidireccional nuevo, autenticación y autorización por servidor, resolución
-  de conflictos, cliente WebSocket/MQTT en el navegador y más superficie de pruebas.
-- Riesgos: brokers públicos sin SLA, secreto portador en relay, deriva entre configuración viva y
-  ZIP offline, métricas obsoletas o inventadas y permisos insuficientes entre servidores hijos.
-
-**Requisitos para aceptar la propuesta.**
-
-1. Definir y validar el esquema de `config/web-editor/mirrors.yml`: `id`, `kind`
-   (`relay`/`direct`), URL, TLS, prioridad, `enabled`, credenciales por referencia y recarga. Sin
-   lista hardcodeada y sin secretos en claro.
-2. Definir el modelo de amenaza: quién conoce el código de 48 hex, qué protege E2EE, qué metadatos
-   ve el broker y cómo se autentica el endpoint directo.
-3. Versionar el protocolo incremental: operaciones, hash base, idempotencia, aplicación atómica,
-   conflictos, endianness y límites de mensaje. El ZIP no puede ser el mensaje de sincronización.
-4. Definir idempotencia ante duplicados de QoS 1 por `TRANSFER_ID` + `CHUNK_INDEX` si el ZIP usa
-   relay, y el comportamiento ante transferencias simultáneas o IDs repetidos.
-5. Resolver el techo de 16 bits de los índices ZIP: 65.535 chunks × 4096 B ≈ 256 MiB. El canal
-   incremental no debe heredar ese límite; una transferencia ZIP por red debe rechazar tamaños
-   mayores de forma explícita.
-6. Fijar el contrato de telemetría: identidad de proceso, unidades, muestreo, coste, retención y
-   métricas disponibles en `iflow-16`, `iflow-32` e `iflow-wasm`. `iflow-32` incluye quantum y
-   watchdog por core; `iflow-16` conserva un vCPU y fuel.
-7. Definir la topología multi servidor: identificador estable, padre/hijo, aislamiento, selección
-   en la UI y coordinación desde Velocity. Bungee solo si se implementa.
-8. Exigir pruebas de fallo: archivo de mirrors ausente/inválido, host personalizado, relay caído,
-   directo sin auth, timeout, chunk perdido, duplicado, CRC/GCM inválido, conflicto de edición,
-   métrica no soportada y fallback explícito.
-9. Mantener el canal separado del pipeline y de `sync-websocket`. `sync-websocket` es un servidor
-   WebSocket de la suite, no un broker MQTT público ni un segundo camino de entrega.
-10. Conservar el ZIP de PL-4: misma raíz, mismas reglas de validación, mismos límites y un solo
-    lector. El canal en vivo no introduce un formato de archivo alternativo.
-
-**Lo que este ADR no promete.** No acepta la propuesta, no añade dependencias, no implementa el
-canal, no garantiza disponibilidad de brokers públicos, no autentica identidades por TLS sola, no
-soporta Bungee sin implementación y no sustituye la importación/exportación ZIP local.
