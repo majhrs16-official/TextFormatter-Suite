@@ -98,7 +98,7 @@ class VmInterpreterTest {
     @Test
     void liInstruction() {
         // LI R0, 0x1234
-        byte[] code = {Opcode.LI, 0, 0x12, 0x34, Opcode.HALT};
+        byte[] code = {Opcode.LI, 0, 0x34, 0x12, Opcode.HALT};
         var p = createInterpreterAndContext(code);
         p.first().execute(p.second());
 
@@ -111,7 +111,7 @@ class VmInterpreterTest {
         // MOV packed byte: high nibble=rd (dest), low nibble=rs (source)
         // R0 = R1 means rd=0, rs=1 -> packed = 0x01
         byte[] code = {
-            Opcode.LI, 1, b(0xAB), b(0xCD),
+            Opcode.LI, 1, b(0xCD), b(0xAB),
             Opcode.MOV, (0 << 4) | 1, // R0 = R1 (rd=0, rs=1)
             Opcode.HALT
         };
@@ -125,8 +125,8 @@ class VmInterpreterTest {
     void addInstruction() {
         // LI R0, 10; LI R1, 20; ADD R0, R1
         byte[] code = {
-            Opcode.LI, 0, 0x00, 0x0A,
-            Opcode.LI, 1, 0x00, 0x14,
+            Opcode.LI, 0, 0x0A, 0x00,
+            Opcode.LI, 1, 0x14, 0x00,
             Opcode.ADD, (0 << 4) | 1, // R0 += R1
             Opcode.HALT
         };
@@ -142,8 +142,8 @@ class VmInterpreterTest {
     void subInstruction() {
         // LI R0, 30; LI R1, 10; SUB R0, R1
         byte[] code = {
-            Opcode.LI, 0, 0x00, 0x1E,
-            Opcode.LI, 1, 0x00, 0x0A,
+            Opcode.LI, 0, 0x1E, 0x00,
+            Opcode.LI, 1, 0x0A, 0x00,
             Opcode.SUB, (0 << 4) | 1, // R0 -= R1
             Opcode.HALT
         };
@@ -157,8 +157,8 @@ class VmInterpreterTest {
     void mulInstruction() {
         // LI R0, 6; LI R1, 7; MUL R0, R1
         byte[] code = {
-            Opcode.LI, 0, 0x00, 0x06,
-            Opcode.LI, 1, 0x00, 0x07,
+            Opcode.LI, 0, 0x06, 0x00,
+            Opcode.LI, 1, 0x07, 0x00,
             Opcode.MUL, (0 << 4) | 1,
             Opcode.HALT
         };
@@ -172,8 +172,8 @@ class VmInterpreterTest {
     void divInstruction() {
         // LI R0, 100; LI R1, 4; DIV R0, R1
         byte[] code = {
-            Opcode.LI, 0, 0x00, 0x64,
-            Opcode.LI, 1, 0x00, 0x04,
+            Opcode.LI, 0, 0x64, 0x00,
+            Opcode.LI, 1, 0x04, 0x00,
             Opcode.DIV, (0 << 4) | 1,
             Opcode.HALT
         };
@@ -187,7 +187,7 @@ class VmInterpreterTest {
     void divByZeroThrows() {
         // LI R0, 10; LI R1, 0; DIV R0, R1
         byte[] code = {
-            Opcode.LI, 0, 0x00, 0x0A,
+            Opcode.LI, 0, 0x0A, 0x00,
             Opcode.LI, 1, 0x00, 0x00,
             Opcode.DIV, (0 << 4) | 1,
             Opcode.HALT
@@ -202,8 +202,8 @@ class VmInterpreterTest {
     void andOrXorNot() {
         // AND
         var p = createInterpreterAndContext(new byte[]{
-            Opcode.LI, 0, 0x00, (byte)0xFF,
-            Opcode.LI, 1, 0x00, 0x0F,
+            Opcode.LI, 0, (byte)0xFF, 0x00,
+            Opcode.LI, 1, 0x0F, 0x00,
             Opcode.AND, (0 << 4) | 1,
             Opcode.HALT
         });
@@ -212,8 +212,8 @@ class VmInterpreterTest {
 
         // OR
         var p2 = createInterpreterAndContext(new byte[]{
-            Opcode.LI, 0, 0x00, (byte)0xF0,
-            Opcode.LI, 1, 0x00, 0x0F,
+            Opcode.LI, 0, (byte)0xF0, 0x00,
+            Opcode.LI, 1, 0x0F, 0x00,
             Opcode.OR, (0 << 4) | 1,
             Opcode.HALT
         });
@@ -222,8 +222,8 @@ class VmInterpreterTest {
 
         // XOR
         var p3 = createInterpreterAndContext(new byte[]{
-            Opcode.LI, 0, 0x00, (byte)0xFF,
-            Opcode.LI, 1, 0x00, 0x0F,
+            Opcode.LI, 0, (byte)0xFF, 0x00,
+            Opcode.LI, 1, 0x0F, 0x00,
             Opcode.XOR, (0 << 4) | 1,
             Opcode.HALT
         });
@@ -232,7 +232,7 @@ class VmInterpreterTest {
 
         // NOT
         var p4 = createInterpreterAndContext(new byte[]{
-            Opcode.LI, 0, 0x00, 0x0F,
+            Opcode.LI, 0, 0x0F, 0x00,
             Opcode.NOT, 0,
             Opcode.HALT
         });
@@ -244,8 +244,8 @@ class VmInterpreterTest {
     void shiftInstructions() {
         // SHL: LI R0, 1; LI R1, 4; SHL R0, R1 -> 16
         var p = createInterpreterAndContext(new byte[]{
-            Opcode.LI, 0, 0x00, 0x01,
-            Opcode.LI, 1, 0x00, 0x04,
+            Opcode.LI, 0, 0x01, 0x00,
+            Opcode.LI, 1, 0x04, 0x00,
             Opcode.SHL, (0 << 4) | 1,
             Opcode.HALT
         });
@@ -254,8 +254,8 @@ class VmInterpreterTest {
 
         // SHR
         var p2 = createInterpreterAndContext(new byte[]{
-            Opcode.LI, 0, 0x00, 0x10,
-            Opcode.LI, 1, 0x00, 0x02,
+            Opcode.LI, 0, 0x10, 0x00,
+            Opcode.LI, 1, 0x02, 0x00,
             Opcode.SHR, (0 << 4) | 1,
             Opcode.HALT
         });
@@ -267,8 +267,8 @@ class VmInterpreterTest {
     void shiftCountTooLargeThrows() {
         // SHL with count 16
         byte[] code = {
-            Opcode.LI, 0, 0x00, 0x01,
-            Opcode.LI, 1, 0x00, 0x10,
+            Opcode.LI, 0, 0x01, 0x00,
+            Opcode.LI, 1, 0x10, 0x00,
             Opcode.SHL, (0 << 4) | 1,
             Opcode.HALT
         };
@@ -282,8 +282,8 @@ class VmInterpreterTest {
     void cmpAndCmpu() {
         // CMP signed: 10 vs 20 -> negative
         var p = createInterpreterAndContext(new byte[]{
-            Opcode.LI, 0, 0x00, 0x0A,
-            Opcode.LI, 1, 0x00, 0x14,
+            Opcode.LI, 0, 0x0A, 0x00,
+            Opcode.LI, 1, 0x14, 0x00,
             Opcode.CMP, (0 << 4) | 1,
             Opcode.HALT
         });
@@ -293,8 +293,8 @@ class VmInterpreterTest {
 
         // CMPU unsigned: 10 vs 20 -> carry
         var p2 = createInterpreterAndContext(new byte[]{
-            Opcode.LI, 0, 0x00, 0x0A,
-            Opcode.LI, 1, 0x00, 0x14,
+            Opcode.LI, 0, 0x0A, 0x00,
+            Opcode.LI, 1, 0x14, 0x00,
             Opcode.CMPU, (0 << 4) | 1,
             Opcode.HALT
         });
@@ -307,8 +307,8 @@ class VmInterpreterTest {
         // JMP to HALT (skip LI)
         // offset = +4 (skip LI R0, 0x1234)
         byte[] code = {
-            Opcode.JMP, 0x00, 0x04,
-            Opcode.LI, 0, 0x12, 0x34,
+            Opcode.JMP, 0x04, 0x00,
+            Opcode.LI, 0, 0x34, 0x12,
             Opcode.HALT
         };
         var p = createInterpreterAndContext(code);
@@ -318,8 +318,8 @@ class VmInterpreterTest {
         // JZ taken
         byte[] code2 = {
             Opcode.LI, 0, 0x00, 0x00,
-            Opcode.JZ, 0x00, 0x04, // jump to HALT (skip 4-byte LI)
-            Opcode.LI, 0, 0x12, 0x34,
+            Opcode.JZ, 0x04, 0x00, // jump to HALT (skip 4-byte LI)
+            Opcode.LI, 0, 0x34, 0x12,
             Opcode.HALT
         };
         var p2 = createInterpreterAndContext(code2);
@@ -328,9 +328,9 @@ class VmInterpreterTest {
 
         // JZ not taken
         byte[] code3 = {
-            Opcode.LI, 0, 0x00, 0x01,
-            Opcode.JZ, 0x00, 0x03,
-            Opcode.LI, 0, 0x12, 0x34,
+            Opcode.LI, 0, 0x01, 0x00,
+            Opcode.JZ, 0x03, 0x00,
+            Opcode.LI, 0, 0x34, 0x12,
             Opcode.HALT
         };
         var p3 = createInterpreterAndContext(code3);
@@ -350,9 +350,9 @@ class VmInterpreterTest {
         // 13: HALT
         byte[] code = {
             Opcode.LI, 0, 0x00, 0x00,
-            Opcode.CALL, 0x00, 0x01, // call offset +1 (to IP=8)
+            Opcode.CALL, 0x01, 0x00, // call offset +1 (to IP=8)
             Opcode.HALT, // after return
-            Opcode.LI, 0, 0x12, 0x34, // subroutine
+            Opcode.LI, 0, 0x34, 0x12, // subroutine
             Opcode.RET,
             Opcode.HALT
         };
@@ -378,11 +378,11 @@ class VmInterpreterTest {
         // 12: RET
         // 13: HALT
         byte[] code = {
-            Opcode.CALL, 0x00, 0x01,                 // 0: call -> 4
+            Opcode.CALL, 0x01, 0x00,                 // 0: call -> 4
             Opcode.HALT,                             // 3
-            Opcode.CALL, 0x00, 0x01,                 // 4: call -> 8
+            Opcode.CALL, 0x01, 0x00,                 // 4: call -> 8
             Opcode.RET,                              // 7
-            Opcode.LI, 0, (byte) 0xAB, (byte) 0xCD,  // 8: LI R0, 0xABCD
+            Opcode.LI, 0, (byte) 0xCD, (byte) 0xAB,  // 8: LI R0, 0xABCD
             Opcode.RET,                              // 12
             Opcode.HALT                              // 13
         };
@@ -398,7 +398,7 @@ class VmInterpreterTest {
     void haltStopsExecution() {
         byte[] code = {
             Opcode.HALT,
-            Opcode.LI, 0, 0x12, 0x34,
+            Opcode.LI, 0, 0x34, 0x12,
             Opcode.HALT
         };
         var p = createInterpreterAndContext(code);
@@ -420,7 +420,7 @@ class VmInterpreterTest {
         // Infinite JMP loop: JMP to self (offset = -3)
         // JMP is 3 bytes at IP=0. To jump back to IP=0, offset = -3 (0xFFFD)
         byte[] code = {
-            Opcode.JMP, (byte)0xFF, (byte)0xFD, // JMP -3 (infinite loop)
+            Opcode.JMP, (byte)0xFD, (byte)0xFF, // JMP -3 (infinite loop)
             Opcode.HALT
         };
 
@@ -445,7 +445,7 @@ class VmInterpreterTest {
         mm.writeWord(vaddr, 0x0A);
 
         byte[] code = {
-            Opcode.LDW, 0, 0x30, 0x00, // LDW R0, [0x3000]
+            Opcode.LDW, 0, 0x00, 0x30, // LDW R0, [0x3000]
             Opcode.HALT
         };
         // Use the same SoftMMU for both write and interpreter
@@ -471,8 +471,8 @@ class VmInterpreterTest {
     void indirectByteStoreThenLoad() {
         // STBI R2, [R1] then LDBI R3, [R1]; the address comes from a register.
         byte[] code = {
-            Opcode.LI, 1, 0x30, 0x00,        // R1 = 0x3000 (data region)
-            Opcode.LI, 2, 0x00, 0x41,        // R2 = 0x41 ('A')
+            Opcode.LI, 1, 0x00, 0x30,        // R1 = 0x3000 (data region)
+            Opcode.LI, 2, 0x41, 0x00,        // R2 = 0x41 ('A')
             Opcode.STBI, (2 << 4) | 1,       // byte[R1] = R2
             Opcode.LDBI, (3 << 4) | 1,       // R3 = byte[R1]
             Opcode.HALT
@@ -486,8 +486,8 @@ class VmInterpreterTest {
     @Test
     void indirectWordIsLittleEndian() {
         byte[] code = {
-            Opcode.LI, 1, 0x30, 0x00,        // R1 = 0x3000
-            Opcode.LI, 2, 0x12, 0x34,        // R2 = 0x1234
+            Opcode.LI, 1, 0x00, 0x30,        // R1 = 0x3000
+            Opcode.LI, 2, 0x34, 0x12,        // R2 = 0x1234
             Opcode.STWI, (2 << 4) | 1,       // word[R1] = R2 (little-endian)
             Opcode.LDWI, (3 << 4) | 1,       // R3 = word[R1]
             Opcode.HALT
@@ -503,10 +503,10 @@ class VmInterpreterTest {
         // LDBI must update Z/N so conditional jumps work on the loaded value.
         // R2 is 0, so byte[R1] = 0 and the following JZ must be taken.
         byte[] code = {
-            Opcode.LI, 1, 0x30, 0x00,        // R1 = 0x3000
+            Opcode.LI, 1, 0x00, 0x30,        // R1 = 0x3000
             Opcode.STBI, (2 << 4) | 1,       // byte[R1] = R2 (= 0)
             Opcode.LDBI, (3 << 4) | 1,       // R3 = byte[R1] = 0 -> sets Z
-            Opcode.JZ, 0x00, 0x04,           // if Z, skip the LI R4 below
+            Opcode.JZ, 0x04, 0x00,           // if Z, skip the LI R4 below
             Opcode.LI, 4, b(0xFF), b(0xFF),  // R4 = 0xFFFF (must be skipped)
             Opcode.HALT
         };
@@ -522,7 +522,7 @@ class VmInterpreterTest {
     void indirectAccessToUnmappedAddressFaults() {
         // The address still passes through the SoftMMU, so protection applies.
         byte[] code = {
-            Opcode.LI, 1, b(0xF0), 0x00,     // R1 = 0xF000 (unmapped)
+            Opcode.LI, 1, 0x00, b(0xF0),     // R1 = 0xF000 (unmapped)
             Opcode.LDBI, (3 << 4) | 1,       // R3 = byte[R1]
             Opcode.HALT
         };
@@ -544,12 +544,12 @@ class VmInterpreterTest {
         });
 
         byte[] code = {
-            Opcode.LI, 0, 0x01, 0x00,          // R0 = PROPERTY_READ
-            Opcode.LI, 1, 0x01, 0x10,          // options = (SCOPE_MESSAGE<<8)|PROP_CONTENT
-            Opcode.LI, 2, b(0x80), 0x00,       // base = output buffer
-            Opcode.LI, 3, 0x00, b(0xFF),       // length
+            Opcode.LI, 0, 0x00, 0x01,          // R0 = PROPERTY_READ
+            Opcode.LI, 1, 0x10, 0x01,          // options = (SCOPE_MESSAGE<<8)|PROP_CONTENT
+            Opcode.LI, 2, 0x00, b(0x80),       // base = output buffer
+            Opcode.LI, 3, b(0xFF), 0x00,       // length
             Opcode.HOST, 0x00,
-            Opcode.LDB, 0, b(0x80), 0x00,      // R0 = first byte the host wrote
+            Opcode.LDB, 0, 0x00, b(0x80),      // R0 = first byte the host wrote
             Opcode.HALT
         };
         ProgramImage prog = ProgramImage.builder().entryPoint(0).code(code).build();
@@ -569,8 +569,8 @@ class VmInterpreterTest {
         HostServiceRegistry hsr = new HostServiceRegistry();
 
         byte[] code = {
-            Opcode.LI, 0, 0x00, 0x2A,   // R0 = 42
-            Opcode.STB, 0, 0x30, 0x00,  // byte[0x3000] = R0
+            Opcode.LI, 0, 0x2A, 0x00,   // R0 = 42
+            Opcode.STB, 0, 0x00, 0x30,  // byte[0x3000] = R0
             Opcode.HALT
         };
         ProgramImage prog = ProgramImage.builder().entryPoint(0).code(code).build();
@@ -594,7 +594,7 @@ class VmInterpreterTest {
         // copy of the image and ran regardless of the page's permission).
         SoftMMU mm = createSoftMMU();
         HostServiceRegistry hsr = new HostServiceRegistry();
-        byte[] code = {Opcode.LI, 0, 0x12, 0x34, Opcode.HALT};
+        byte[] code = {Opcode.LI, 0, 0x34, 0x12, Opcode.HALT};
         loadCode(mm, code);
         // Demote the first code page to R/W (no EXECUTE).
         mm.getPageTable().protect(VmMemoryMap.pageOf(VmMemoryMap.CODE_BASE),
@@ -636,8 +636,8 @@ class VmInterpreterTest {
     @Test
     void modInstructionUsesSignedRemainder() {
         var positive = createInterpreterAndContext(new byte[]{
-            Opcode.LI, 0, 0x00, 0x0D,
-            Opcode.LI, 1, 0x00, 0x05,
+            Opcode.LI, 0, 0x0D, 0x00,
+            Opcode.LI, 1, 0x05, 0x00,
             Opcode.MOD, (0 << 4) | 1,
             Opcode.HALT
         });
@@ -645,8 +645,8 @@ class VmInterpreterTest {
         assertEquals(3, positive.second().registers().get(RegisterFile.R0));
 
         var negative = createInterpreterAndContext(new byte[]{
-            Opcode.LI, 0, (byte) 0xFF, (byte) 0xF3, // -13
-            Opcode.LI, 1, 0x00, 0x05,
+            Opcode.LI, 0, (byte) 0xF3, (byte) 0xFF, // -13
+            Opcode.LI, 1, 0x05, 0x00,
             Opcode.MOD, (0 << 4) | 1,
             Opcode.HALT
         });
@@ -657,7 +657,7 @@ class VmInterpreterTest {
     @Test
     void modByZeroThrows() {
         var p = createInterpreterAndContext(new byte[]{
-            Opcode.LI, 0, 0x00, 0x0A,
+            Opcode.LI, 0, 0x0A, 0x00,
             Opcode.LI, 1, 0x00, 0x00,
             Opcode.MOD, (0 << 4) | 1,
             Opcode.HALT
@@ -670,7 +670,7 @@ class VmInterpreterTest {
     @Test
     void signedDivisionOverflowThrows() {
         var p = createInterpreterAndContext(new byte[]{
-            Opcode.LI, 0, (byte) 0x80, 0x00,
+            Opcode.LI, 0, 0x00, (byte) 0x80,
             Opcode.LI, 1, (byte) 0xFF, (byte) 0xFF,
             Opcode.DIV, (0 << 4) | 1,
             Opcode.HALT
@@ -683,8 +683,8 @@ class VmInterpreterTest {
     @Test
     void arithmeticShiftRightSignExtends() {
         var p = createInterpreterAndContext(new byte[]{
-            Opcode.LI, 0, (byte) 0x80, 0x00,
-            Opcode.LI, 1, 0x00, 0x01,
+            Opcode.LI, 0, 0x00, (byte) 0x80,
+            Opcode.LI, 1, 0x01, 0x00,
             Opcode.SAR, (0 << 4) | 1,
             Opcode.HALT
         });
@@ -697,11 +697,11 @@ class VmInterpreterTest {
     void jnzJcAndJvBranchOnTheirFlags() {
         // CMP 1,0 clears Z: JNZ must skip the following LI.
         var jnz = createInterpreterAndContext(new byte[]{
-            Opcode.LI, 0, 0x00, 0x01,
+            Opcode.LI, 0, 0x01, 0x00,
             Opcode.LI, 1, 0x00, 0x00,
             Opcode.CMP, (0 << 4) | 1,
-            Opcode.JNZ, 0x00, 0x04,
-            Opcode.LI, 0, 0x12, 0x34,
+            Opcode.JNZ, 0x04, 0x00,
+            Opcode.LI, 0, 0x34, 0x12,
             Opcode.HALT
         });
         jnz.first().execute(jnz.second());
@@ -710,10 +710,10 @@ class VmInterpreterTest {
         // 0xFFFF + 1 sets carry: JC must skip the following LI.
         var jc = createInterpreterAndContext(new byte[]{
             Opcode.LI, 0, (byte) 0xFF, (byte) 0xFF,
-            Opcode.LI, 1, 0x00, 0x01,
+            Opcode.LI, 1, 0x01, 0x00,
             Opcode.ADD, (0 << 4) | 1,
-            Opcode.JC, 0x00, 0x04,
-            Opcode.LI, 0, 0x12, 0x34,
+            Opcode.JC, 0x04, 0x00,
+            Opcode.LI, 0, 0x34, 0x12,
             Opcode.HALT
         });
         jc.first().execute(jc.second());
@@ -721,11 +721,11 @@ class VmInterpreterTest {
 
         // 0x7FFF + 1 sets overflow: JV must skip the following LI.
         var jv = createInterpreterAndContext(new byte[]{
-            Opcode.LI, 0, 0x7F, (byte) 0xFF,
-            Opcode.LI, 1, 0x00, 0x01,
+            Opcode.LI, 0, (byte) 0xFF, 0x7F,
+            Opcode.LI, 1, 0x01, 0x00,
             Opcode.ADD, (0 << 4) | 1,
-            Opcode.JV, 0x00, 0x04,
-            Opcode.LI, 0, 0x12, 0x34,
+            Opcode.JV, 0x04, 0x00,
+            Opcode.LI, 0, 0x34, 0x12,
             Opcode.HALT
         });
         jv.first().execute(jv.second());
@@ -751,7 +751,7 @@ class VmInterpreterTest {
     @Test
     void jumpOutsideTheCodeThrows() {
         var p = createInterpreterAndContext(new byte[]{
-            Opcode.JMP, 0x7F, (byte) 0xFF,
+            Opcode.JMP, (byte) 0xFF, 0x7F,
             Opcode.HALT
         });
 
@@ -773,9 +773,9 @@ class VmInterpreterTest {
     private static byte[] blockTransfer(int opcode, int source, int destination, int length) {
         return new byte[]{
             (byte) opcode,
-            (byte) (source >> 8), (byte) source,
-            (byte) (destination >> 8), (byte) destination,
-            (byte) (length >> 8), (byte) length,
+            (byte) source, (byte) (source >> 8),
+            (byte) destination, (byte) (destination >> 8),
+            (byte) length, (byte) (length >> 8),
             0x00, // reserved padding: BLOCK instructions are 8 bytes
             Opcode.HALT
         };

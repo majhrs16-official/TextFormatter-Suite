@@ -149,10 +149,9 @@ usa para despachar. Además de la tabla hay **fuentes de interrupción por E/S**
 | Servicios | `HOST` |
 | Control | `HALT`, `TRAP` |
 
-**Formato de instrucción**: opcode de 8 bits que determina la longitud (1-8 bytes). Los **operandos
-inmediatos de 16 bits van en big-endian** (`[hi, lo]`), igual que la cabecera del contenedor; el
-opcode y los campos de registro ocupan 1 byte. El *endianness* de los **datos en memoria** es otro:
-ver la cabecera y las instrucciones `LDW`/`STW`.
+**Formato de instrucción**: opcode de 8 bits que determina la longitud (1-8 bytes). Los
+**operandos inmediatos de 16 bits van en little-endian** (`[lo, hi]`), igual que la cabecera, el
+TOC y las palabras de datos en memoria; el opcode y los campos de registro ocupan 1 byte.
 
 ### Instrucción `HOST` (servicios genéricos) — ABI v2
 
@@ -301,8 +300,8 @@ de usuario disponible:
 ### Formato binario `.flow`
 
 ```
-Header (32 bytes, big-endian):
-  u32 magic             = 0x464C4F57 ("FLOW")
+Header (32 bytes, little-endian):
+  4B  magic             = "FLOW" (firma de bytes)
   u8  formatVersion     = 2
   u8  isaVersion        = 2
   u8  minAbiVersion     = 2
@@ -311,7 +310,7 @@ Header (32 bytes, big-endian):
   u16 tocOffset
   u16 tocEntryCount     (1..16)
   u16 headerFlags       (0)
-  u32 layoutMagic       = 0x524F4D32 ("ROM2")
+  4B  layoutMagic       = "ROM2" (firma de bytes)
   u32 payloadSize       (bytes before the final hash)
   u32 reserved          (0)
   u32 reserved          (0)
@@ -349,11 +348,12 @@ kernel-owned and `CONSTANTS` is `R`.
 > segmentos tipados. Los `.flow` antiguos no se migran en runtime: **hay que recompilar** con el
 > ensamblador actual.
 
-> **Endianness mixto (deliberado).** La cabecera, el TOC y los operandos inmediatos de las
-> instrucciones son **big-endian**; las palabras de **datos** en memoria (RAM y el payload de
-> `CONSTANTS`) son **little-endian**. El payload cargable se copia tal cual, así que `CONSTANTS`
-> se serializa ya en orden de memoria. Quien escriba un ensamblador o un parser nuevo debe
-> respetarlo: asumir «todo little-endian» decodifica mal la cabecera y los inmediatos.
+> **Little-endian único.** La cabecera, el TOC, los operandos inmediatos de las instrucciones y
+> las palabras de **datos** en memoria (RAM y el payload de `CONSTANTS`) usan little-endian. Los
+> campos `magic` y `layoutMagic` son firmas de bytes ASCII (`FLOW`, `ROM2`), no enteros multibyte.
+> El payload cargable se copia tal cual; `CONSTANTS` se serializa ya en orden de memoria. No hay
+> conversión de orden en el loader ni lector alternativo: un `.flow` con campos big-endian debe
+> recompilarse.
 
 El parser exige que `minAbiVersion` **coincida exactamente** con el ABI del runtime
 (hoy v2): un `.flow` construido para otra convención de llamada se rechaza al cargar.

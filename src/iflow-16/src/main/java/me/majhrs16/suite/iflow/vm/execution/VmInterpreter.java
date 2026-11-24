@@ -151,7 +151,7 @@ public final class VmInterpreter {
             case Opcode.LI -> {
                 // RI16: LI Rd, imm16
                 int rd = fetch(ctx, ip + 1);
-                int imm = (fetch(ctx, ip + 2) << 8) | fetch(ctx, ip + 3);
+                int imm = fetch(ctx, ip + 2) | (fetch(ctx, ip + 3) << 8);
                 checkGPR(rd, ip);
                 regs.set(rd, imm);
                 regs.updateZN(imm);
@@ -173,7 +173,7 @@ public final class VmInterpreter {
             case Opcode.LDB -> {
                 // MEM: LDB Rd, [virtualAddr]
                 int rd = fetch(ctx, ip + 1);
-                int virtualAddr = (fetch(ctx, ip + 2) << 8) | fetch(ctx, ip + 3);
+                int virtualAddr = fetch(ctx, ip + 2) | (fetch(ctx, ip + 3) << 8);
                 checkGPR(rd, ip);
                 int val = ctx.bus().readByte(virtualAddr);
                 regs.set(rd, val);
@@ -182,7 +182,7 @@ public final class VmInterpreter {
             }
             case Opcode.LDW -> {
                 int rd = fetch(ctx, ip + 1);
-                int virtualAddr = (fetch(ctx, ip + 2) << 8) | fetch(ctx, ip + 3);
+                int virtualAddr = fetch(ctx, ip + 2) | (fetch(ctx, ip + 3) << 8);
                 checkGPR(rd, ip);
                 int val = ctx.bus().readWord(virtualAddr);
                 regs.set(rd, val);
@@ -191,14 +191,14 @@ public final class VmInterpreter {
             }
             case Opcode.STB -> {
                 int rs = fetch(ctx, ip + 1);
-                int virtualAddr = (fetch(ctx, ip + 2) << 8) | fetch(ctx, ip + 3);
+                int virtualAddr = fetch(ctx, ip + 2) | (fetch(ctx, ip + 3) << 8);
                 checkGPR(rs, ip);
                 ctx.bus().writeByte(virtualAddr, regs.get(rs));
                 return false;
             }
             case Opcode.STW -> {
                 int rs = fetch(ctx, ip + 1);
-                int virtualAddr = (fetch(ctx, ip + 2) << 8) | fetch(ctx, ip + 3);
+                int virtualAddr = fetch(ctx, ip + 2) | (fetch(ctx, ip + 3) << 8);
                 checkGPR(rs, ip);
                 ctx.bus().writeWord(virtualAddr, regs.get(rs));
                 return false;
@@ -588,9 +588,9 @@ public final class VmInterpreter {
         return false;
     }
 
-    /** Reads a big-endian 16-bit operand from the code stream (through the MMU). */
+    /** Reads a little-endian 16-bit operand from the code stream (through the MMU). */
     private static int u16(ExecutionContext ctx, int offset) {
-        return (fetch(ctx, offset) << 8) | fetch(ctx, offset + 1);
+        return fetch(ctx, offset) | (fetch(ctx, offset + 1) << 8);
     }
 
     /**

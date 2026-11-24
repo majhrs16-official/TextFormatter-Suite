@@ -62,8 +62,8 @@ function withHash(bytes) {
 }
 
 function segmentTocOffset(bytes, wantedType) {
-  const tocOffset = bytes.readUInt16BE(10);
-  const tocCount = bytes.readUInt16BE(12);
+  const tocOffset = bytes.readUInt16LE(10);
+  const tocCount = bytes.readUInt16LE(12);
   for (let i = 0; i < tocCount; i++) {
     const base = tocOffset + i * 16;
     if (bytes[base] === wantedType) {
@@ -74,7 +74,7 @@ function segmentTocOffset(bytes, wantedType) {
 }
 
 function segmentFileOffset(bytes, wantedType) {
-  return bytes.readUInt32BE(segmentTocOffset(bytes, wantedType) + 4);
+  return bytes.readUInt32LE(segmentTocOffset(bytes, wantedType) + 4);
 }
 
 function checkFixture(name) {
@@ -183,7 +183,7 @@ console.log('\n--- text listing ---');
 const listing = run([path.join(fixtures, 'simple.flow')]);
 ok(listing.status === 0, 'prints a listing');
 ok(listing.stdout.includes('; entry 0x0202'), 'the listing reports the entry point');
-ok(listing.stdout.includes('0x1000  00 00 12 34'), 'the listing shows address and bytes');
+ok(listing.stdout.includes('0x1000  00 00 34 12'), 'the listing shows address and bytes');
 ok(listing.stdout.includes('LI R0, 0x1234'), 'the listing shows the mnemonic');
 
 console.log('\n--- strict errors ---');
@@ -221,7 +221,7 @@ ok(unknownListing.stdout.includes('.byte 0xF0'), 'the listing shows the .byte');
 
 const outOfRegionFile = path.join(tmp, 'out-of-region.flow');
 const outOfRegion = Buffer.from(source);
-outOfRegion.writeUInt16BE(0x2000, segmentTocOffset(outOfRegion, 4) + 2);
+outOfRegion.writeUInt16LE(0x2000, segmentTocOffset(outOfRegion, 4) + 2);
 fs.writeFileSync(outOfRegionFile, withHash(outOfRegion));
 const outOfRegionRes = run([outOfRegionFile]);
 ok(outOfRegionRes.status !== 0, 'rejects a program outside the code region');

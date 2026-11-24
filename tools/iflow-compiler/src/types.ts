@@ -262,12 +262,13 @@ export interface Diagnostic {
 }
 
 /**
- * Magic number at the start of every {@code .flow} file: the ASCII bytes
- * "FLOW" (0x464C4F57), big-endian. Its only job is to reject a foreign or
- * truncated file immediately with "not a .flow" instead of failing later with
- * a version or hash error (IFLOW-AUD-038).
+ * Magic bytes at the start of every {@code .flow} file: ASCII "FLOW". The
+ * signature is compared as bytes, not as a multibyte integer, so endianness
+ * never applies to it. Its only job is to reject a foreign or truncated file
+ * immediately with "not a .flow" instead of failing later with a version or
+ * hash error (IFLOW-AUD-038).
  */
-export const PROGRAM_MAGIC = 0x464C4F57;
+export const PROGRAM_MAGIC: readonly number[] = [0x46, 0x4C, 0x4F, 0x57];
 
 /**
  * Program-image versions written into the .flow header. Single source of truth

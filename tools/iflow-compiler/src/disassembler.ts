@@ -26,7 +26,6 @@ import {
 const HEADER_SIZE = 32;
 const TOC_ENTRY_SIZE = 16;
 const HASH_SIZE = 32;
-const LAYOUT_MAGIC = 0x524f4d32; // "ROM2"
 const MAX_TOC_ENTRIES = 16;
 const IMAGE_END = 0x3000;
 const CODE_END = 0x2000;
@@ -97,15 +96,15 @@ export interface DisassemblyResult {
 /* ── parsing ────────────────────────────────────────────────────────────── */
 
 function u16(data: Uint8Array, offset: number): number {
-  return ((data[offset] & 0xff) << 8) | (data[offset + 1] & 0xff);
+  return (data[offset] & 0xff) | ((data[offset + 1] & 0xff) << 8);
 }
 
 function u32(data: Uint8Array, offset: number): number {
   return (
-    ((data[offset] & 0xff) << 24) |
-    ((data[offset + 1] & 0xff) << 16) |
-    ((data[offset + 2] & 0xff) << 8) |
-    (data[offset + 3] & 0xff)
+    (data[offset] & 0xff) |
+    ((data[offset + 1] & 0xff) << 8) |
+    ((data[offset + 2] & 0xff) << 16) |
+    ((data[offset + 3] & 0xff) << 24)
   );
 }
 
@@ -131,9 +130,8 @@ export async function parseProgramImage(data: Uint8Array, verifyHash = true): Pr
   if (data.length < HEADER_SIZE + HASH_SIZE) {
     throw new DisassemblerError('datos demasiado cortos para la cabecera y el hash');
   }
-  const magic = u32(data, 0);
-  if (magic !== PROGRAM_MAGIC) {
-    throw new DisassemblerError('no es un .flow (magic 0x' + magic.toString(16).toUpperCase() + ')');
+  if (!PROGRAM_MAGIC.every((byte, index) => data[index] === byte)) {
+    throw new DisassemblerError('no es un .flow (magic 0x' + u32(data, 0).toString(16).toUpperCase() + ')');
   }
   const formatVersion = data[4];
   const isaVersion = data[5];
@@ -153,10 +151,10 @@ export async function parseProgramImage(data: Uint8Array, verifyHash = true): Pr
       'firmware ' + minFirmwareVersion + ' más nuevo que ' + PROGRAM_VERSIONS.minFirmware
     );
   }
-  const layoutMagic = u32(data, 16);
-  if (layoutMagic !== LAYOUT_MAGIC) {
+  const layoutMagic = String.fromCharCode(data[16], data[17], data[18], data[19]);
+  if (layoutMagic !== 'ROM2') {
     throw new DisassemblerError(
-      'layout .flow no soportado: se esperaba ROM2, hay 0x' + layoutMagic.toString(16).toUpperCase()
+      'layout .flow no soportado: se esperaba ROM2, hay 0x' + u32(data, 16).toString(16).toUpperCase()
     );
   }
 

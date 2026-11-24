@@ -529,21 +529,21 @@ npm run build && node dist/cli.js test/firmware.flowasm -o test/firmware.flow
 
 ## Formato binario `.flow` generado
 
-### Cabecera (32 bytes, big-endian)
+### Cabecera (32 bytes, little-endian)
 
 | Offset | Tamaño | Campo |
 |--------|--------|-------|
-| 0x00   | 4      | magic = 0x464C4F57 ("FLOW", u32 big-endian) |
+| 0x00   | 4      | magic = "FLOW" (firma de bytes) |
 | 0x04   | 1      | formatVersion = 2 |
 | 0x05   | 1      | isaVersion |
 | 0x06   | 1      | minAbiVersion |
 | 0x07   | 1      | minFirmwareVersion |
-| 0x08   | 2      | entryPoint (u16 big-endian) |
-| 0x0A   | 2      | tocOffset (u16 big-endian) |
-| 0x0C   | 2      | tocEntryCount (u16 big-endian; 1..16) |
+| 0x08   | 2      | entryPoint (u16 little-endian) |
+| 0x0A   | 2      | tocOffset (u16 little-endian) |
+| 0x0C   | 2      | tocEntryCount (u16 little-endian; 1..16) |
 | 0x0E   | 2      | headerFlags (0) |
-| 0x10   | 4      | layoutMagic = 0x524F4D32 ("ROM2", u32 big-endian) |
-| 0x14   | 4      | payloadSize (u32 big-endian; bytes before the hash) |
+| 0x10   | 4      | layoutMagic = "ROM2" (firma de bytes) |
+| 0x14   | 4      | payloadSize (u32 little-endian; bytes before the hash) |
 | 0x18   | 4      | reserved (0) |
 | 0x1C   | 4      | reserved (0) |
 
@@ -553,10 +553,10 @@ npm run build && node dist/cli.js test/firmware.flowasm -o test/firmware.flow
 |--------|--------|-------|
 | +0x00  | 1      | type (1 BIOS, 2 BOOTLOADER, 3 KERNEL, 4 PROGRAM, 5 CONSTANTS, 6 CAPABILITIES, 7 DEBUG) |
 | +0x01  | 1      | flags (R=1, W=2, X=4, USER=8) |
-| +0x02  | 2      | virtualAddress (u16 big-endian) |
-| +0x04  | 4      | fileOffset (u32 big-endian, absoluto desde el inicio) |
-| +0x08  | 2      | size (u16 big-endian; bytes almacenados) |
-| +0x0A  | 2      | memSize (u16 big-endian; bytes reservados; 0 en metadatos) |
+| +0x02  | 2      | virtualAddress (u16 little-endian) |
+| +0x04  | 4      | fileOffset (u32 little-endian, absoluto desde el inicio) |
+| +0x08  | 2      | size (u16 little-endian; bytes almacenados) |
+| +0x0A  | 2      | memSize (u16 little-endian; bytes reservados; 0 en metadatos) |
 | +0x0C  | 4      | reserved (0) |
 
 Tras el TOC vienen los payloads en el mismo orden, y al final el hash SHA-256 de
@@ -577,11 +577,11 @@ pool mayor en vez de emitir una imagen que el parser de runtime descartaría.
 > símbolos `SYM nombre = 0x…`). Es informativo: el runtime nunca lo ejecuta, y queda cubierto por el
 > hash, así que no puede alterar el programa sin romper la integridad.
 
-> **Endianness mixto (deliberado).** La cabecera, el TOC y los operandos inmediatos del *código* son
-> **big-endian**; las palabras de **datos** en memoria son **little-endian**. Como los payloads se
-> copian a memoria sin conversión, el segmento `CONSTANTS` se serializa ya en little-endian para que
-> `LDW` lo lea bien. No es una errata: quien escriba un ensamblador o un parser nuevo debe respetar
-> esa separación.
+> **Little-endian único.** La cabecera, el TOC, los operandos inmediatos del *código* y las
+> palabras de **datos** en memoria son **little-endian**. `magic` y `layoutMagic` son firmas de
+> bytes ASCII (`FLOW`, `ROM2`), no enteros multibyte. Como los payloads se copian a memoria sin
+> conversión, el segmento `CONSTANTS` se serializa ya en little-endian para que `LDW` lo lea bien.
+> No hay conversión de orden en el loader ni lector big-endian alternativo.
 
 ---
 

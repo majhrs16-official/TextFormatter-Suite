@@ -2984,8 +2984,8 @@ V1 se cierra con este ADR. V2–V5 deben demostrar, como mínimo:
 
 ## ADR-038 — Dos líneas separadas: `iflow-16` e `iflow-32`
 
-**Estado:** Aceptada (2026-11-15). Sustituye en parte el alcance global de ADR-037: ADR-037 sigue
-siendo el contrato de `iflow-32`; esta decisión crea y rige la línea `iflow-16`.
+**Estado:** Aceptada (2026-11-15). Enmendada (2026-11-23): `.flow` v2 pasa a little-endian único;
+ADR-037 sigue siendo el contrato de `iflow-32` y esta decisión rige la línea `iflow-16`.
 
 **Contexto.** `src/iflow-vm` implementa la máquina v2 de 16 bits y 64 KB. La línea v3 de 32 bits
 ya tiene contrato congelado en ADR-037 y un núcleo aislado, pero todavía no está cableada al hub.
@@ -3045,14 +3045,16 @@ líneas.
 8. **Layout `.flow` v2 de `iflow-16` (ROM2).** El contenedor de 16 bits se rediseña como imagen
    ROM con cabecera, TOC y segmentos tipados. El layout es propio de `iflow-16`; no se comparte
    con la ROM v3 de ADR-037.
-   - **Cabecera de 32 bytes, big-endian.** `+0` magic `0x464C4F57` (`FLOW`); `+4` format `2`;
+   - **Cabecera de 32 bytes, little-endian.** `+0` 4 bytes magic ASCII `FLOW`; `+4` format `2`;
      `+5` ISA `2`; `+6` ABI mínima `2`; `+7` firmware mínimo `1`; `+8` `entryPoint` u16;
      `+10` `tocOffset` u16; `+12` `tocEntryCount` u16; `+14` flags de cabecera (0);
-     `+16` layout magic `0x524F4D32` (`ROM2`); `+20` `payloadSize` u32 (bytes antes del hash);
-     `+24` y `+28` reservados (0).
+     `+16` 4 bytes layout magic ASCII `ROM2`; `+20` `payloadSize` u32 (bytes antes del hash);
+     `+24` y `+28` reservados (0). Todos los campos numéricos multibyte son little-endian.
+     `FLOW` y `ROM2` son firmas de bytes, no enteros multibyte, y se comparan byte a byte.
    - **TOC de 16 bytes por entrada.** `+0` tipo u8; `+1` flags u8; `+2` `vaddr` u16;
      `+4` `fileOffset` u32; `+8` `size` u16; `+10` `memSize` u16; `+12` reservado u32 (0).
-     Los offsets son absolutos desde el inicio del archivo. Se admiten de 1 a 16 entradas.
+     Todos los campos numéricos son little-endian. Los offsets son absolutos desde el inicio del
+     archivo. Se admiten de 1 a 16 entradas.
    - **Tipos de segmento.** `BIOS=1`, `BOOTLOADER=2`, `KERNEL=3`, `PROGRAM=4`, `CONSTANTS=5`,
      `CAPABILITIES=6`, `DEBUG=7`. Del 1 al 5 son cargables; el 6 y el 7 son metadatos y siempre
      tienen `memSize=0`.
@@ -3065,13 +3067,17 @@ líneas.
      constantes viven en `0x2000..0x2FFF` y el resto de la imagen no se usa para código. `entryPoint`
      debe caer dentro de un segmento ejecutable almacenado. El compilador emite BIOS, PROGRAM y
      CONSTANTS; los tipos `BOOTLOADER` y `KERNEL` quedan reservados para una separación posterior.
-   - **Orden de bytes de datos.** Los payloads cargables se copian a memoria tal cual. Como el ISA
-     lee palabras little-endian, el segmento `CONSTANTS` almacena cada palabra en orden de memoria
-     (byte bajo primero), no en el orden big-endian de la cabecera.
+   - **Orden de bytes de datos e instrucciones.** Los payloads cargables se copian a memoria tal
+     cual. El ISA lee palabras little-endian, los operandos inmediatos de 16 bits se codifican
+     `[lo, hi]` y el segmento `CONSTANTS` almacena cada palabra en orden de memoria (byte bajo
+     primero). Cabecera, TOC, instrucciones, direcciones, tamaños, constantes, memoria y MMIO son
+     little-endian; no queda ningún campo big-endian ni conversión en el loader.
    - **Integridad y rechazo.** `payloadSize` debe coincidir con el archivo menos los 32 bytes del
      SHA-256 final; el hash cubre todo el payload. El layout anterior de 20 bytes se rechaza por
      `layoutMagic`: no hay lector legacy, alias ni migración en runtime. Un `.flow` v3 se rechaza
-     por versión/layout, no se reinterpreta como v2.
+     por versión/layout, no se reinterpreta como v2. Un `.flow` v2 con la cabecera o el TOC
+     big-endian anteriores no se lee con un segundo parser: se rechaza por las validaciones de
+     tamaño/TOC y debe recompilarse con el ensamblador actual.
 
 9. **Núcleos por línea.** `iflow-32` es una sola VM con `CORE_COUNT` núcleos configurables
    (ADR-037 enmendado, 2026-11-16); no es una VM por core. `iflow-16` conserva **un único vCPU por

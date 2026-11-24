@@ -5,10 +5,11 @@
  * exige `WasmPolicyRouter`. Todo es síncrono y sin dependencias para que la
  * exportación pueda abortar antes de escribir bytes inválidos.
  *
- * Formato `.flow` v2 (ProgramImageParser): cabecera big-endian de 32 bytes con
- * layout ROM2, TOC de 16 bytes por entrada, segmentos tipados (BIOS, PROGRAM,
- * CONSTANTS y metadatos), payload copiado a memoria y un trailer SHA-256 de 32
- * bytes sobre todo lo anterior.
+ * Formato `.flow` v2 (ProgramImageParser): cabecera little-endian de 32 bytes
+ * con layout ROM2, TOC de 16 bytes por entrada, segmentos tipados (BIOS,
+ * PROGRAM, CONSTANTS y metadatos), payload copiado a memoria y un trailer
+ * SHA-256 de 32 bytes sobre todo lo anterior. `FLOW` y `ROM2` son firmas de
+ * bytes ASCII, no enteros multibyte.
  *
  * Formato `.wasm`: magic `\0asm`, versión 1 little-endian y secciones con
  * longitud varuint32. El editor no valida la semántica del módulo; solo la
@@ -23,8 +24,8 @@
   });
 
   const FLOW = Object.freeze({
-    MAGIC: 0x464c4f57,
-    LAYOUT_MAGIC: 0x524f4d32,
+    MAGIC: 'FLOW',
+    LAYOUT_MAGIC: 'ROM2',
     HEADER_SIZE: 32,
     TOC_ENTRY_SIZE: 16,
     MAX_TOC_ENTRIES: 16,
@@ -255,9 +256,9 @@
       return fail('datos demasiado cortos para la cabecera .flow y el hash');
     }
     const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-    const magic = view.getUint32(0);
+    const magic = String.fromCharCode(data[0], data[1], data[2], data[3]);
     if (magic !== FLOW.MAGIC) {
-      return fail('no es un .flow (magic 0x' + magic.toString(16) + ', esperado 0x464c4f57)');
+      return fail('no es un .flow (magic ' + JSON.stringify(magic) + ', se espera FLOW)');
     }
     const formatVersion = data[4];
     const isaVersion = data[5];
@@ -275,20 +276,20 @@
     if (firmwareVersion > FLOW.FIRMWARE_VERSION) {
       return fail('firmware mínimo demasiado nuevo: ' + firmwareVersion);
     }
-    const layoutMagic = view.getUint32(16);
+    const layoutMagic = String.fromCharCode(data[16], data[17], data[18], data[19]);
     if (layoutMagic !== FLOW.LAYOUT_MAGIC) {
-      return fail('layout .flow no soportado: 0x' + layoutMagic.toString(16) + ' (se espera ROM2)');
+      return fail('layout .flow no soportado: ' + JSON.stringify(layoutMagic) + ' (se espera ROM2)');
     }
 
-    const entryPoint = view.getUint16(8);
-    const tocOffset = view.getUint16(10);
-    const tocCount = view.getUint16(12);
-    const headerFlags = view.getUint16(14);
-    const payloadSize = view.getUint32(20);
+    const entryPoint = view.getUint16(8, true);
+    const tocOffset = view.getUint16(10, true);
+    const tocCount = view.getUint16(12, true);
+    const headerFlags = view.getUint16(14, true);
+    const payloadSize = view.getUint32(20, true);
     if (headerFlags !== 0) {
       return fail('flags de cabecera no soportados: 0x' + headerFlags.toString(16));
     }
-    if (view.getUint32(24) !== 0 || view.getUint32(28) !== 0) {
+    if (view.getUint32(24, true) !== 0 || view.getUint32(28, true) !== 0) {
       return fail('campos reservados de cabecera no nulos');
     }
     if (payloadSize + FLOW.HASH_SIZE > data.length) {
@@ -319,11 +320,11 @@
       if ((flags & ~(FLOW.FLAG_READ | FLOW.FLAG_WRITE | FLOW.FLAG_EXECUTE | FLOW.FLAG_USER)) !== 0) {
         return fail('flags de segmento desconocidos: 0x' + flags.toString(16));
       }
-      const vaddr = view.getUint16(base + 2);
-      const fileOffset = view.getUint32(base + 4);
-      const size = view.getUint16(base + 8);
-      const memSize = view.getUint16(base + 10);
-      if (view.getUint32(base + 12) !== 0) {
+      const vaddr = view.getUint16(base + 2, true);
+      const fileOffset = view.getUint32(base + 4, true);
+      const size = view.getUint16(base + 8, true);
+      const memSize = view.getUint16(base + 10, true);
+      if (view.getUint32(base + 12, true) !== 0) {
         return fail('campos reservados de TOC no nulos');
       }
       if (fileOffset < tocEnd || fileOffset + size > payloadSize) {

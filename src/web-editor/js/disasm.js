@@ -14,8 +14,8 @@
   const HEADER_SIZE = 32;
   const TOC_ENTRY_SIZE = 16;
   const HASH_SIZE = 32;
-  const MAGIC = 0x464c4f57;
-  const LAYOUT_MAGIC = 0x524f4d32; // "ROM2"
+  const MAGIC = 'FLOW';
+  const LAYOUT_MAGIC = 'ROM2';
   const MAX_TOC_ENTRIES = 16;
   const EXECUTABLE = new Set([1, 2, 3, 4]);
 
@@ -107,15 +107,15 @@
   }
 
   function u16(data, offset) {
-    return ((data[offset] & 0xff) << 8) | (data[offset + 1] & 0xff);
+    return (data[offset] & 0xff) | ((data[offset + 1] & 0xff) << 8);
   }
 
   function u32(data, offset) {
     return (
-      ((data[offset] & 0xff) << 24) |
-      ((data[offset + 1] & 0xff) << 16) |
-      ((data[offset + 2] & 0xff) << 8) |
-      (data[offset + 3] & 0xff)
+      (data[offset] & 0xff) |
+      ((data[offset + 1] & 0xff) << 8) |
+      ((data[offset + 2] & 0xff) << 16) |
+      ((data[offset + 3] & 0xff) << 24)
     );
   }
 
@@ -134,13 +134,13 @@
     if (bytes.length < HEADER_SIZE + HASH_SIZE) {
       throw new DisasmError('datos demasiado cortos para la cabecera y el hash');
     }
-    const magic = u32(bytes, 0);
+    const magic = String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]);
     if (magic !== MAGIC) {
-      throw new DisasmError('no es un .flow (magic ' + hex(magic, 8) + ')');
+      throw new DisasmError('no es un .flow (magic ' + hex(u32(bytes, 0), 8) + ')');
     }
-    const layoutMagic = u32(bytes, 16);
+    const layoutMagic = String.fromCharCode(bytes[16], bytes[17], bytes[18], bytes[19]);
     if (layoutMagic !== LAYOUT_MAGIC) {
-      throw new DisasmError('layout .flow no soportado: ' + hex(layoutMagic, 8));
+      throw new DisasmError('layout .flow no soportado: ' + hex(u32(bytes, 16), 8));
     }
     const entryPoint = u16(bytes, 8);
     const tocOffset = u16(bytes, 10);

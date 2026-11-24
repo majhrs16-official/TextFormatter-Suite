@@ -115,7 +115,7 @@ assertEq(simple.userEnd, 0x1005, 'ends at the code length');
 assertEq(simple.entryPoint, 0x0202, 'reports the BIOS entry point');
 assertEq(simple.instructions.length, 2, 'decodes two instructions');
 assertEq(simple.instructions[0].text, 'LI R0, 0x1234', 'decodes LI');
-assertEq(simple.instructions[0].bytes, [0x00, 0x00, 0x12, 0x34], 'keeps the instruction bytes');
+assertEq(simple.instructions[0].bytes, [0x00, 0x00, 0x34, 0x12], 'keeps the instruction bytes');
 assertEq(simple.instructions[1].text, 'HALT', 'decodes HALT');
 assertEq(simple.blocks.length, 1, 'builds one block');
 assertEq(simple.blocks[0].successors, [], 'the single block has no successors');
@@ -170,12 +170,12 @@ assert(threw, 'rejects a userStart outside the code');
 console.log('\n--- errores y resincronización ---');
 function programFileOffset(bytes) {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const tocOffset = view.getUint16(10);
-  const tocCount = view.getUint16(12);
+  const tocOffset = view.getUint16(10, true);
+  const tocCount = view.getUint16(12, true);
   for (let i = 0; i < tocCount; i++) {
     const base = tocOffset + i * 16;
     if (bytes[base] === 4) {
-      return view.getUint32(base + 4);
+      return view.getUint32(base + 4, true);
     }
   }
   throw new Error('PROGRAM segment not found');
@@ -220,7 +220,7 @@ try {
 assert(threw, 'rejects a short header');
 
 const truncated = Buffer.from(fixture('simple'));
-truncated.writeUInt32BE(truncated.length, 20);
+truncated.writeUInt32LE(truncated.length, 20);
 threw = false;
 try {
   Disasm.decode(truncated);
@@ -232,7 +232,7 @@ assert(threw, 'rejects a truncated payload');
 console.log('\n--- listado ---');
 const listing = Disasm.formatListing(simple);
 assert(listing.includes('; entry 0x0202'), 'the listing reports the entry point');
-assert(listing.includes('0x1000  00 00 12 34'), 'the listing shows address and bytes');
+assert(listing.includes('0x1000  00 00 34 12'), 'the listing shows address and bytes');
 assert(listing.includes('LI R0, 0x1234'), 'the listing shows the mnemonic');
 assert(listing.includes('; CFG'), 'the listing shows the CFG');
 const unknownListing = Disasm.formatListing(unknownResult);

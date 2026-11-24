@@ -52,34 +52,34 @@ class ProgramImageParserTest {
         out.write(2); // ISA
         out.write(2); // minimum ABI
         out.write(1); // minimum firmware
-        out.write((entryPoint >> 8) & 0xFF);
         out.write(entryPoint & 0xFF);
-        out.write((tocOffset >> 8) & 0xFF);
+        out.write((entryPoint >> 8) & 0xFF);
         out.write(tocOffset & 0xFF);
-        out.write((segments.length >> 8) & 0xFF);
+        out.write((tocOffset >> 8) & 0xFF);
         out.write(segments.length & 0xFF);
+        out.write((segments.length >> 8) & 0xFF);
         out.write(0); out.write(0); // header flags
         out.write(new byte[]{0x52, 0x4F, 0x4D, 0x32}); // layout "ROM2"
-        out.write((payloadSize >>> 24) & 0xFF);
-        out.write((payloadSize >>> 16) & 0xFF);
-        out.write((payloadSize >>> 8) & 0xFF);
         out.write(payloadSize & 0xFF);
+        out.write((payloadSize >>> 8) & 0xFF);
+        out.write((payloadSize >>> 16) & 0xFF);
+        out.write((payloadSize >>> 24) & 0xFF);
         out.write(new byte[8]); // reserved
 
         int cursor = payloadStart;
         for (SegmentSpec segment : segments) {
             out.write(segment.type().code());
             out.write(segment.flags());
-            out.write((segment.virtualAddress() >> 8) & 0xFF);
             out.write(segment.virtualAddress() & 0xFF);
-            out.write((cursor >>> 24) & 0xFF);
-            out.write((cursor >>> 16) & 0xFF);
-            out.write((cursor >>> 8) & 0xFF);
+            out.write((segment.virtualAddress() >> 8) & 0xFF);
             out.write(cursor & 0xFF);
-            out.write((segment.data().length >> 8) & 0xFF);
+            out.write((cursor >>> 8) & 0xFF);
+            out.write((cursor >>> 16) & 0xFF);
+            out.write((cursor >>> 24) & 0xFF);
             out.write(segment.data().length & 0xFF);
-            out.write((segment.memSize() >> 8) & 0xFF);
+            out.write((segment.data().length >> 8) & 0xFF);
             out.write(segment.memSize() & 0xFF);
+            out.write((segment.memSize() >> 8) & 0xFF);
             out.write(new byte[4]); // reserved
             cursor += segment.data().length;
         }
@@ -184,6 +184,40 @@ class ProgramImageParserTest {
         VmException e = assertThrows(VmException.class, () -> ProgramImageParser.parse(data));
         assertEquals(VmException.Code.INVALID_PROGRAM, e.code());
         assertTrue(e.getMessage().contains("Unsupported .flow layout"), e.getMessage());
+    }
+
+    @Test
+    void readsLittleEndianHeaderAndTocFields() throws Exception {
+        // 0x1000 is written as 00 10 in little-endian; a big-endian reader
+        // would decode 0x0010 and reject or misplace the segment.
+        byte[] data = image(0x1000, new SegmentSpec(ProgramSegmentType.PROGRAM,
+            ProgramSegment.FLAG_READ | ProgramSegment.FLAG_EXECUTE | ProgramSegment.FLAG_USER,
+            0x1000, new byte[]{0x68}, 0x1000));
+
+        ProgramImage program = ProgramImageParser.parse(data);
+        ProgramSegment segment = program.segments()[0];
+
+        assertEquals(0x1000, program.entryPoint());
+        assertEquals(0x1000, segment.virtualAddress());
+        assertEquals(0x1000, segment.memSize());
+        assertEquals(1, segment.size());
+    }
+
+    @Test
+    void rejectsBigEndianPayloadSizeWithoutADualReader() throws Exception {
+        // The former layout wrote payloadSize big-endian. That is a different
+        // format, not a variant: the little-endian reader rejects it instead of
+        // guessing the byte order.
+        byte[] data = image(0x1000, program(new byte[]{0x68}));
+        int payloadSize = data.length - 32;
+        data[20] = (byte) ((payloadSize >>> 24) & 0xFF);
+        data[21] = (byte) ((payloadSize >>> 16) & 0xFF);
+        data[22] = (byte) ((payloadSize >>> 8) & 0xFF);
+        data[23] = (byte) (payloadSize & 0xFF);
+
+        VmException e = assertThrows(VmException.class, () -> ProgramImageParser.parse(data));
+        assertEquals(VmException.Code.INVALID_PROGRAM, e.code());
+        assertTrue(e.getMessage().contains("Payload size mismatch"), e.getMessage());
     }
 
     @Test

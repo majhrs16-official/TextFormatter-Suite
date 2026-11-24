@@ -30,8 +30,8 @@ if (!fs.existsSync(cli)) {
   process.exit(2);
 }
 
-const MAGIC = 0x464c4f57; // "FLOW"
-const LAYOUT_MAGIC = 0x524f4d32; // "ROM2"
+const MAGIC = Buffer.from('FLOW', 'ascii');
+const LAYOUT_MAGIC = Buffer.from('ROM2', 'ascii');
 const HEADER_SIZE = 32;
 const TOC_ENTRY_SIZE = 16;
 const HASH_SIZE = 32;
@@ -50,16 +50,15 @@ function assemble(source, extra = []) {
 function formatProblems(buf, expectDebug) {
   const problems = [];
 
-  const magic = buf.readUInt32BE(0);
-  if (magic !== MAGIC) problems.push(`magic 0x${magic.toString(16)} != 0x464c4f57`);
+  if (!buf.subarray(0, 4).equals(MAGIC)) problems.push(`magic ${buf.subarray(0, 4).toString('ascii')} != FLOW`);
   if (buf[4] !== 2) problems.push(`formatVersion ${buf[4]} != 2`);
-  if (buf.readUInt32BE(16) !== LAYOUT_MAGIC) {
-    problems.push(`layoutMagic 0x${buf.readUInt32BE(16).toString(16)} != 0x524f4d32`);
+  if (!buf.subarray(16, 20).equals(LAYOUT_MAGIC)) {
+    problems.push(`layoutMagic ${buf.subarray(16, 20).toString('ascii')} != ROM2`);
   }
 
-  const tocOffset = buf.readUInt16BE(10);
-  const tocCount = buf.readUInt16BE(12);
-  const payloadSize = buf.readUInt32BE(20);
+  const tocOffset = buf.readUInt16LE(10);
+  const tocCount = buf.readUInt16LE(12);
+  const payloadSize = buf.readUInt32LE(20);
   if (payloadSize !== buf.length - HASH_SIZE) {
     problems.push(`payloadSize ${payloadSize} != file-32 (${buf.length - HASH_SIZE})`);
   }
@@ -78,9 +77,9 @@ function formatProblems(buf, expectDebug) {
       break;
     }
     const type = buf[base];
-    const fileOffset = buf.readUInt32BE(base + 4);
-    const size = buf.readUInt16BE(base + 8);
-    const memSize = buf.readUInt16BE(base + 10);
+    const fileOffset = buf.readUInt32LE(base + 4);
+    const size = buf.readUInt16LE(base + 8);
+    const memSize = buf.readUInt16LE(base + 10);
     types.push(type);
     if (fileOffset < tocEnd || fileOffset + size > payloadSize) {
       problems.push(`segment ${i} file range ${fileOffset}+${size} outside payload`);
@@ -116,13 +115,13 @@ function formatProblems(buf, expectDebug) {
 
 /** Returns the bytes of the first segment of the given type, or null. */
 function segmentData(buf, wantedType) {
-  const tocOffset = buf.readUInt16BE(10);
-  const tocCount = buf.readUInt16BE(12);
+  const tocOffset = buf.readUInt16LE(10);
+  const tocCount = buf.readUInt16LE(12);
   for (let i = 0; i < tocCount; i++) {
     const base = tocOffset + i * TOC_ENTRY_SIZE;
     if (buf[base] !== wantedType) continue;
-    const fileOffset = buf.readUInt32BE(base + 4);
-    const size = buf.readUInt16BE(base + 8);
+    const fileOffset = buf.readUInt32LE(base + 4);
+    const size = buf.readUInt16LE(base + 8);
     return buf.subarray(fileOffset, fileOffset + size);
   }
   return null;

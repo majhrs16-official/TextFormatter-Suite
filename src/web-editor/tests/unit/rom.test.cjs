@@ -102,14 +102,14 @@ function buildFlow(over) {
   out[5] = options.isa;
   out[6] = options.abi;
   out[7] = options.firmware;
-  out.writeUInt16BE(options.entryPoint, 8);
-  out.writeUInt16BE(tocOffset, 10);
-  out.writeUInt16BE(tocCount, 12);
-  out.writeUInt16BE(0, 14);
+  out.writeUInt16LE(options.entryPoint, 8);
+  out.writeUInt16LE(tocOffset, 10);
+  out.writeUInt16LE(tocCount, 12);
+  out.writeUInt16LE(0, 14);
   out.writeUInt32BE(options.layout, 16);
-  out.writeUInt32BE(payloadSize, 20);
-  out.writeUInt32BE(0, 24);
-  out.writeUInt32BE(0, 28);
+  out.writeUInt32LE(payloadSize, 20);
+  out.writeUInt32LE(0, 24);
+  out.writeUInt32LE(0, 28);
 
   for (let i = 0; i < tocCount; i++) {
     const segment = segments[i];
@@ -119,11 +119,11 @@ function buildFlow(over) {
     const base = tocOffset + i * 16;
     out[base] = segment.type;
     out[base + 1] = segment.flags;
-    out.writeUInt16BE(segment.vaddr, base + 2);
-    out.writeUInt32BE(segment.fileOffset, base + 4);
-    out.writeUInt16BE(segment.data.length, base + 8);
-    out.writeUInt16BE(segment.memSize, base + 10);
-    out.writeUInt32BE(0, base + 12);
+    out.writeUInt16LE(segment.vaddr, base + 2);
+    out.writeUInt32LE(segment.fileOffset, base + 4);
+    out.writeUInt16LE(segment.data.length, base + 8);
+    out.writeUInt16LE(segment.memSize, base + 10);
+    out.writeUInt32LE(0, base + 12);
   }
   for (const segment of segments) {
     segment.data.copy(out, segment.fileOffset);

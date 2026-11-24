@@ -61,18 +61,42 @@ function hashOf(bytes) {
 function buildFlow(code) {
   const body = Buffer.from(code || [0x00, 0x00]);
   const caps = Buffer.from([0x6c, 0x6f, 0x67, 0x00]);
-  const out = Buffer.alloc(20 + body.length + caps.length);
-  out.writeUInt32BE(0x464c4f57, 0);
+  const tocOffset = 32;
+  const tocCount = 2;
+  const payloadStart = tocOffset + tocCount * 16;
+  const codeOffset = payloadStart;
+  const capsOffset = codeOffset + body.length;
+  const payloadSize = capsOffset + caps.length;
+  const out = Buffer.alloc(payloadSize);
+  out.write('FLOW', 0, 'ascii');
   out[4] = 2;
   out[5] = 2;
   out[6] = 2;
   out[7] = 1;
-  out.writeUInt16BE(0, 8);
-  out.writeUInt16BE(body.length, 10);
-  out.writeUInt16BE(0, 12);
-  out[14] = 1;
-  body.copy(out, 20);
-  caps.copy(out, 20 + body.length);
+  out.writeUInt16LE(0, 8);
+  out.writeUInt16LE(tocOffset, 10);
+  out.writeUInt16LE(tocCount, 12);
+  out.writeUInt16LE(0, 14);
+  out.write('ROM2', 16, 'ascii');
+  out.writeUInt32LE(payloadSize, 20);
+  out.writeUInt32LE(0, 24);
+  out.writeUInt32LE(0, 28);
+  out[32] = 4; // PROGRAM
+  out[33] = 1 | 4 | 8; // R | X | USER
+  out.writeUInt16LE(0, 34);
+  out.writeUInt32LE(codeOffset, 36);
+  out.writeUInt16LE(body.length, 40);
+  out.writeUInt16LE(body.length, 42);
+  out.writeUInt32LE(0, 44);
+  out[48] = 6; // CAPABILITIES
+  out[49] = 0;
+  out.writeUInt16LE(0, 50);
+  out.writeUInt32LE(capsOffset, 52);
+  out.writeUInt16LE(caps.length, 56);
+  out.writeUInt16LE(0, 58);
+  out.writeUInt32LE(0, 60);
+  body.copy(out, codeOffset);
+  caps.copy(out, capsOffset);
   return new Uint8Array(Buffer.concat([out, hashOf(out)]));
 }
 

@@ -39,15 +39,15 @@ for (const c of cases) {
   if (c.codeHex) {
     if (res.status === 0) {
       const buf = fs.readFileSync(outFile);
-      const tocOffset = buf.readUInt16BE(10);
-      const tocCount = buf.readUInt16BE(12);
+      const tocOffset = buf.readUInt16LE(10);
+      const tocCount = buf.readUInt16LE(12);
       const program = Array.from({ length: tocCount }, (_, i) => tocOffset + i * 16)
         .find(base => buf[base] === 4);
       if (program === undefined) {
         bytesOk = false;
       } else {
-        const fileOffset = buf.readUInt32BE(program + 4);
-        const size = buf.readUInt16BE(program + 8);
+        const fileOffset = buf.readUInt32LE(program + 4);
+        const size = buf.readUInt16LE(program + 8);
         actualCodeHex = buf.subarray(fileOffset, fileOffset + size).toString('hex');
         bytesOk = actualCodeHex === c.codeHex;
       }

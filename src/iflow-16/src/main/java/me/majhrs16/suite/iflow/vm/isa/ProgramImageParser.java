@@ -11,7 +11,7 @@ import java.util.List;
 /**
  * Parser for the 16-bit {@code .flow} ROM container (format 2, layout revision 1).
  *
- * <h2>Header (32 bytes, big-endian)</h2>
+ * <h2>Header (32 bytes, little-endian)</h2>
  * <pre>
  *   +0   u32  magic 0x464C4F57 ("FLOW")
  *   +4   u8   formatVersion (2)
@@ -28,7 +28,7 @@ import java.util.List;
  *   +28  u32  reserved (0)
  * </pre>
  *
- * <h2>TOC entry (16 bytes, big-endian)</h2>
+ * <h2>TOC entry (16 bytes, little-endian)</h2>
  * <pre>
  *   +0   u8   segment type
  *   +1   u8   flags (1=R, 2=W, 4=X, 8=user)
@@ -48,11 +48,11 @@ import java.util.List;
  */
 public final class ProgramImageParser {
 
-    /** Magic number at the start of every .flow file: ASCII "FLOW". */
-    public static final int MAGIC = 0x464C4F57;
+    /** Magic bytes at the start of every .flow file: ASCII "FLOW". */
+    private static final byte[] MAGIC = {'F', 'L', 'O', 'W'};
 
     /** Marks format 2 layout revision 1 (header + TOC + typed segments). */
-    public static final int LAYOUT_MAGIC = 0x524F4D32; // "ROM2"
+    private static final byte[] LAYOUT_MAGIC = {'R', 'O', 'M', '2'};
 
     public static final int HEADER_SIZE = 32;
     public static final int TOC_ENTRY_SIZE = 16;
@@ -78,10 +78,10 @@ public final class ProgramImageParser {
             throw invalid("Data too short for header and hash");
         }
 
-        int magic = u32(data, 0);
-        if (magic != MAGIC) {
-            throw invalid("Not a .flow file (bad magic: 0x" + Integer.toHexString(magic)
-                + ", expected 0x" + Integer.toHexString(MAGIC) + ")");
+        if (!matches(data, 0, MAGIC)) {
+            throw invalid("Not a .flow file (bad magic: 0x"
+                + Integer.toHexString(u32(data, 0))
+                + ", expected ASCII FLOW)");
         }
 
         int formatVersion = u8(data, 4);
@@ -105,10 +105,9 @@ public final class ProgramImageParser {
                 + " (max " + CURRENT_FIRMWARE_VERSION + ")");
         }
 
-        int layoutMagic = u32(data, 16);
-        if (layoutMagic != LAYOUT_MAGIC) {
+        if (!matches(data, 16, LAYOUT_MAGIC)) {
             throw invalid("Unsupported .flow layout: expected ROM2, got 0x"
-                + Integer.toHexString(layoutMagic));
+                + Integer.toHexString(u32(data, 16)));
         }
 
         int entryPoint = u16(data, 8);
@@ -445,14 +444,23 @@ public final class ProgramImageParser {
     }
 
     private static int u16(byte[] data, int offset) {
-        return ((data[offset] & 0xFF) << 8) | (data[offset + 1] & 0xFF);
+        return (data[offset] & 0xFF) | ((data[offset + 1] & 0xFF) << 8);
     }
 
     private static int u32(byte[] data, int offset) {
-        return ((data[offset] & 0xFF) << 24)
-            | ((data[offset + 1] & 0xFF) << 16)
-            | ((data[offset + 2] & 0xFF) << 8)
-            | (data[offset + 3] & 0xFF);
+        return (data[offset] & 0xFF)
+            | ((data[offset + 1] & 0xFF) << 8)
+            | ((data[offset + 2] & 0xFF) << 16)
+            | ((data[offset + 3] & 0xFF) << 24);
+    }
+
+    private static boolean matches(byte[] data, int offset, byte[] expected) {
+        for (int index = 0; index < expected.length; index++) {
+            if (data[offset + index] != expected[index]) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static long u32u(byte[] data, int offset) {

@@ -1,6 +1,6 @@
 [
-  { "file": "valid-edge-immediates.flowasm",        "expect": "ok", "flags": ["--no-firmware"], "codeHex": "0001ffff00027fff00038000000400000005ffff68" },
-  { "file": "valid-indirect.flowasm",               "expect": "ok", "flags": ["--no-firmware"], "codeHex": "00013000000200410a210831000212340b21094168" },
+  { "file": "valid-edge-immediates.flowasm",        "expect": "ok", "flags": ["--no-firmware"], "codeHex": "0001ffff0002ff7f00030080000400000005ffff68" },
+  { "file": "valid-indirect.flowasm",               "expect": "ok", "flags": ["--no-firmware"], "codeHex": "00010030000241000a210831000234120b21094168" },
   { "file": "valid-register-r7.flowasm",            "expect": "ok" },
   { "file": "valid-symbolic-immediate.flowasm",     "expect": "ok" },
   { "file": "invalid-align-zero.flowasm",           "expect": "error", "match": ".align requires positive integer" },

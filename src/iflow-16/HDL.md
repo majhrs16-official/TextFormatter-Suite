@@ -229,9 +229,9 @@ solapamiento, R3).
 | Parámetros (`#(parameter)`) | Constantes (`VmMemoryMap`, `Opcode`) |
 
 **ISA (estructura de instrucción)**: opcode de 8 bits que determina la longitud
-(1-8 bytes), datos *little-endian*. Los operandos inmediatos `LI` son
-*big-endian* `[hi, lo]` (detalle del ensamblador). La tabla de opcodes y tamaños
-vive en `vm/isa/Opcode`.
+(1-8 bytes). Todos los campos multibyte, incluidos los operandos inmediatos `LI`,
+son *little-endian* (`[lo, hi]`). La tabla de opcodes y tamaños vive en
+`vm/isa/Opcode`.
 
 ---
 
@@ -257,8 +257,8 @@ hardware previsto pendiente.
   la clase Java correspondiente en `CamelCase` con la ruta del paquete.
 - **Señales** en minúsculas (`address`, `data`, `we`, `re`, `x`, `priv`, `len`).
 - **Dominios** en mayúsculas (`PROGRAM`, `SUPERVISOR`).
-- **Direcciones** en hexadecimal con prefijo `0x`; palabras *little-endian* salvo
-  los inmediatos de `LI`.
+- **Direcciones** en hexadecimal con prefijo `0x`; todos los campos multibyte son
+  *little-endian*.
 
 ---
 

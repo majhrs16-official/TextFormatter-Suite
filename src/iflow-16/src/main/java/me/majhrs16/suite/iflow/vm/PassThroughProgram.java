@@ -20,11 +20,11 @@ public final class PassThroughProgram {
         .code(new byte[]{
             // HOST ABI v2: R0 = service ID, R1 = options (decision code).
             Opcode.LI, 0,
-                (HostServiceRegistry.ROUTE_DECISION >> 8) & 0xFF,
                 HostServiceRegistry.ROUTE_DECISION & 0xFF,
+                (HostServiceRegistry.ROUTE_DECISION >> 8) & 0xFF,
             Opcode.LI, 1,
-                (HostServiceRegistry.DECISION_CONTINUE >> 8) & 0xFF,
                 HostServiceRegistry.DECISION_CONTINUE & 0xFF,
+                (HostServiceRegistry.DECISION_CONTINUE >> 8) & 0xFF,
             Opcode.HOST, 0x00, // opcode + reserved padding byte
             Opcode.HALT
         })

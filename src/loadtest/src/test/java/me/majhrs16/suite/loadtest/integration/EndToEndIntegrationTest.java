@@ -423,16 +423,16 @@ class EndToEndIntegrationTest {
         return ProgramImage.builder()
             .entryPoint(0)
             .code(new byte[]{
-                Opcode.LDB, 1, 0x70, 0x00,              // LDB R1, [0x7000] (first content byte)
-                Opcode.LI, 2, 0x00, (byte) (ch & 0xFF), // LI R2, ch
+                Opcode.LDB, 1, 0x00, 0x70,              // LDB R1, [0x7000] (first content byte)
+                Opcode.LI, 2, (byte) (ch & 0xFF), 0x00, // LI R2, ch
                 Opcode.CMP, 0x12,                       // CMP R1, R2
-                Opcode.JZ, 0x00, 0x0B,                  // JZ drop
-                Opcode.LI, 0, 0x03, 0x00,               // LI R0, ROUTE_DECISION
-                Opcode.LI, 1, 0x00, 0x06,               // LI R1, DECISION_CONTINUE (options)
+                Opcode.JZ, 0x0B, 0x00,                  // JZ drop
+                Opcode.LI, 0, 0x00, 0x03,               // LI R0, ROUTE_DECISION
+                Opcode.LI, 1, 0x06, 0x00,               // LI R1, DECISION_CONTINUE (options)
                 Opcode.HOST, 0x00,
                 Opcode.HALT,
-                Opcode.LI, 0, 0x03, 0x00,               // LI R0, ROUTE_DECISION
-                Opcode.LI, 1, 0x00, 0x01,               // LI R1, DECISION_DROP (options)
+                Opcode.LI, 0, 0x00, 0x03,               // LI R0, ROUTE_DECISION
+                Opcode.LI, 1, 0x01, 0x00,               // LI R1, DECISION_DROP (options)
                 Opcode.HOST, 0x00,
                 Opcode.HALT
             })

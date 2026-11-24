@@ -113,10 +113,10 @@ private RateLimiter createRateLimiter() {
         // STW Rs, [vaddr] format: opcode + rs + vaddr16 (4 bytes)
         // LDW Rd, [vaddr] format: opcode + rd + vaddr16 (4 bytes)
         byte[] code = new byte[]{
-            Opcode.LI, 0, 0x30, 0x00,  // LI R0, 0x3000 (data region)
-            Opcode.LI, 1, 0x00, 0x42,  // LI R1, 0x42
-            Opcode.STW, 1, 0x30, 0x00,  // STW R1, [0x3000]
-            Opcode.LDW, 0, 0x30, 0x00,  // LDW R0, [0x3000]
+            Opcode.LI, 0, 0x00, 0x30,  // LI R0, 0x3000 (data region)
+            Opcode.LI, 1, 0x42, 0x00,  // LI R1, 0x42
+            Opcode.STW, 1, 0x00, 0x30,  // STW R1, [0x3000]
+            Opcode.LDW, 0, 0x00, 0x30,  // LDW R0, [0x3000]
             Opcode.HALT
         };
         
@@ -335,14 +335,14 @@ private RateLimiter createRateLimiter() {
             .code(new byte[]{
                 // Read message.content into the input buffer.
                 // HOST ABI v2: R0=op, R1=options, R2=base, R3=length.
-                Opcode.LI, 0, (byte)(HostServiceRegistry.PROPERTY_READ >> 8), (byte)(HostServiceRegistry.PROPERTY_READ & 0xFF),
-                Opcode.LI, 1, (byte)0x01, (byte)0x10,   // options = (SCOPE_MESSAGE<<8)|PROP_CONTENT
-                Opcode.LI, 2, (byte)0x70, (byte)0x00,   // base = 0x7000 (input buffer)
-                Opcode.LI, 3, (byte)0x00, (byte)0xFF,   // length = 255
+                Opcode.LI, 0, (byte)(HostServiceRegistry.PROPERTY_READ & 0xFF), (byte)(HostServiceRegistry.PROPERTY_READ >> 8),
+                Opcode.LI, 1, (byte)0x10, (byte)0x01,   // options = (SCOPE_MESSAGE<<8)|PROP_CONTENT
+                Opcode.LI, 2, (byte)0x00, (byte)0x70,   // base = 0x7000 (input buffer)
+                Opcode.LI, 3, (byte)0xFF, (byte)0x00,   // length = 255
                 Opcode.HOST, (byte)0x00,
                 // Continue
-                Opcode.LI, 0, (byte)(HostServiceRegistry.ROUTE_DECISION >> 8), (byte)(HostServiceRegistry.ROUTE_DECISION & 0xFF),
-                Opcode.LI, 1, (byte)(HostServiceRegistry.DECISION_CONTINUE >> 8), (byte)(HostServiceRegistry.DECISION_CONTINUE & 0xFF),
+                Opcode.LI, 0, (byte)(HostServiceRegistry.ROUTE_DECISION & 0xFF), (byte)(HostServiceRegistry.ROUTE_DECISION >> 8),
+                Opcode.LI, 1, (byte)(HostServiceRegistry.DECISION_CONTINUE & 0xFF), (byte)(HostServiceRegistry.DECISION_CONTINUE >> 8),
                 Opcode.HOST, (byte)0x00,
                 Opcode.HALT
             })

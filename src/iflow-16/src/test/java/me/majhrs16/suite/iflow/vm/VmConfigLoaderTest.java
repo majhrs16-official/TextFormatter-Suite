@@ -56,13 +56,13 @@ class VmConfigLoaderTest {
         // LI R0, ROUTE_DECISION
         assertEquals(Opcode.LI, code[0] & 0xFF);
         assertEquals(0, code[1] & 0xFF);
-        assertEquals((HostServiceRegistry.ROUTE_DECISION >> 8) & 0xFF, code[2] & 0xFF);
-        assertEquals(HostServiceRegistry.ROUTE_DECISION & 0xFF, code[3] & 0xFF);
+        assertEquals(HostServiceRegistry.ROUTE_DECISION & 0xFF, code[2] & 0xFF);
+        assertEquals((HostServiceRegistry.ROUTE_DECISION >> 8) & 0xFF, code[3] & 0xFF);
         // LI R1, DECISION_CONTINUE (HOST ABI v2: R1 = options)
         assertEquals(Opcode.LI, code[4] & 0xFF);
         assertEquals(1, code[5] & 0xFF);
-        assertEquals((HostServiceRegistry.DECISION_CONTINUE >> 8) & 0xFF, code[6] & 0xFF);
-        assertEquals(HostServiceRegistry.DECISION_CONTINUE & 0xFF, code[7] & 0xFF);
+        assertEquals(HostServiceRegistry.DECISION_CONTINUE & 0xFF, code[6] & 0xFF);
+        assertEquals((HostServiceRegistry.DECISION_CONTINUE >> 8) & 0xFF, code[7] & 0xFF);
         // HOST (opcode + reserved operand byte)
         assertEquals(Opcode.HOST, code[8] & 0xFF);
         assertEquals(0, code[9] & 0xFF);
@@ -124,44 +124,44 @@ class VmConfigLoaderTest {
             out.write(2); // ISA version
             out.write(2); // minimum ABI version
             out.write(1); // minimum firmware version
-            out.write((entryPoint >> 8) & 0xFF);
             out.write(entryPoint & 0xFF);
-            out.write((tocOffset >> 8) & 0xFF);
+            out.write((entryPoint >> 8) & 0xFF);
             out.write(tocOffset & 0xFF);
-            out.write((segmentCount >> 8) & 0xFF);
+            out.write((tocOffset >> 8) & 0xFF);
             out.write(segmentCount & 0xFF);
+            out.write((segmentCount >> 8) & 0xFF);
             out.write(0); out.write(0); // header flags
             out.write(new byte[]{0x52, 0x4F, 0x4D, 0x32}); // layout "ROM2"
-            out.write((payloadSize >>> 24) & 0xFF);
-            out.write((payloadSize >>> 16) & 0xFF);
-            out.write((payloadSize >>> 8) & 0xFF);
             out.write(payloadSize & 0xFF);
+            out.write((payloadSize >>> 8) & 0xFF);
+            out.write((payloadSize >>> 16) & 0xFF);
+            out.write((payloadSize >>> 24) & 0xFF);
             out.write(new byte[8]); // reserved
 
             // PROGRAM at 0x0000: a bare-metal image with no BIOS segment.
             out.write(4); // SegmentType.PROGRAM
             out.write(1 | 4 | 8); // R | X | USER
             out.write(0); out.write(0); // virtual address
-            out.write((payloadStart >>> 24) & 0xFF);
-            out.write((payloadStart >>> 16) & 0xFF);
-            out.write((payloadStart >>> 8) & 0xFF);
             out.write(payloadStart & 0xFF);
-            out.write((code.length >> 8) & 0xFF);
+            out.write((payloadStart >>> 8) & 0xFF);
+            out.write((payloadStart >>> 16) & 0xFF);
+            out.write((payloadStart >>> 24) & 0xFF);
             out.write(code.length & 0xFF);
             out.write((code.length >> 8) & 0xFF);
             out.write(code.length & 0xFF);
+            out.write((code.length >> 8) & 0xFF);
             out.write(new byte[4]); // reserved
 
             if (capabilities.length > 0) {
                 out.write(6); // SegmentType.CAPABILITIES
                 out.write(0); // flags
                 out.write(0); out.write(0); // virtual address
-                out.write((capabilityOffset >>> 24) & 0xFF);
-                out.write((capabilityOffset >>> 16) & 0xFF);
-                out.write((capabilityOffset >>> 8) & 0xFF);
                 out.write(capabilityOffset & 0xFF);
-                out.write((capabilityBytes.length >> 8) & 0xFF);
+                out.write((capabilityOffset >>> 8) & 0xFF);
+                out.write((capabilityOffset >>> 16) & 0xFF);
+                out.write((capabilityOffset >>> 24) & 0xFF);
                 out.write(capabilityBytes.length & 0xFF);
+                out.write((capabilityBytes.length >> 8) & 0xFF);
                 out.write(0); out.write(0); // memSize
                 out.write(new byte[4]); // reserved
             }

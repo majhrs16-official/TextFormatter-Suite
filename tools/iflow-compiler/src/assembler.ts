@@ -206,9 +206,9 @@ class Assembler {
 
     // ===== Size-correct emitter with label/fixup support =====
     const u8 = (b: number) => { fw.push(b & 0xFF); };
-    const u16be = (v: number) => { fw.push((v >> 8) & 0xFF, v & 0xFF); };
+    const u16le = (v: number) => { fw.push(v & 0xFF, (v >> 8) & 0xFF); };
     const pack = (a: number, b: number) => u8(((a & 0x0F) << 4) | (b & 0x0F));
-    const li = (rd: number, imm: number) => { u8(Opcode.LI); u8(rd); u16be(imm & 0xFFFF); };
+    const li = (rd: number, imm: number) => { u8(Opcode.LI); u8(rd); u16le(imm & 0xFFFF); };
     const mov = (rd: number, rs: number) => { u8(Opcode.MOV); pack(rd, rs); };
     const rr = (op: Opcode, rd: number, rs: number) => { u8(op); pack(rd, rs); };
     const ldbi = (rd: number, rs: number) => { u8(Opcode.LDBI); pack(rd, rs); };
@@ -554,16 +554,16 @@ class Assembler {
     u8(0x00);
     u8(0x00);
     const chainRel = (userEntry - (chainAt + 3)) & 0xFFFF;
-    fw[chainAt + 1] = (chainRel >> 8) & 0xFF;
-    fw[chainAt + 2] = chainRel & 0xFF;
+    fw[chainAt + 1] = chainRel & 0xFF;
+    fw[chainAt + 2] = (chainRel >> 8) & 0xFF;
 
     // ===== Resolve relative branches =====
     for (const fx of fixups) {
       const target = labelAddr.get(fx.label);
       if (target === undefined) continue; // unreachable: all labels are defined above
       const offset = (target - (fx.at + 2)) & 0xFFFF;
-      fw[fx.at] = (offset >> 8) & 0xFF;
-      fw[fx.at + 1] = offset & 0xFF;
+      fw[fx.at] = offset & 0xFF;
+      fw[fx.at + 1] = (offset >> 8) & 0xFF;
     }
 
     // ===== Device control block reservation (D31) =====
@@ -983,8 +983,8 @@ class Assembler {
         const rd = this.getRegOperand(operands, 0);
         const imm = this.getImm16Operand(operands, 1);
         code.push(rd);
-        code.push((imm >> 8) & 0xFF);
         code.push(imm & 0xFF);
+        code.push((imm >> 8) & 0xFF);
         break;
       }
 
@@ -1007,8 +1007,8 @@ class Assembler {
         const reg = this.getRegOperand(operands, 0);
         const vaddr = this.getVaddrOperand(operands, 1);
         code.push(reg);
-        code.push((vaddr >> 8) & 0xFF);
         code.push(vaddr & 0xFF);
+        code.push((vaddr >> 8) & 0xFF);
         break;
       }
 
@@ -1032,9 +1032,9 @@ class Assembler {
         const src = this.getVaddrOperand(operands, 0);
         const dst = this.getVaddrOperand(operands, 1);
         const len = this.getImm16Operand(operands, 2);
-        code.push((src >> 8) & 0xFF, src & 0xFF);
-        code.push((dst >> 8) & 0xFF, dst & 0xFF);
-        code.push((len >> 8) & 0xFF, len & 0xFF);
+        code.push(src & 0xFF, (src >> 8) & 0xFF);
+        code.push(dst & 0xFF, (dst >> 8) & 0xFF);
+        code.push(len & 0xFF, (len >> 8) & 0xFF);
         code.push(0x00); // Padding byte to make 8 bytes total (1 opcode + 7 operands = 8)
         break;
       }
@@ -1076,8 +1076,8 @@ class Assembler {
       case Opcode.JV:
       case Opcode.CALL: { // BR16 offset16
         const offset = this.getBranchOffset(operands, 0, instr.address, opcode);
-        code.push((offset >> 8) & 0xFF);
         code.push(offset & 0xFF);
+        code.push((offset >> 8) & 0xFF);
         break;
       }
 
@@ -1371,7 +1371,7 @@ class Assembler {
    * Serializes the header, TOC and payload segments, i.e. everything the
    * SHA-256 hash covers (all bytes before the trailing 32-byte hash field).
    *
-   * Layout (format 2, layout revision 1 "ROM2"), big-endian:
+   * Layout (format 2, layout revision 1 "ROM2"), little-endian numeric fields:
    * <pre>
    *   +0   u32  magic 0x464C4F57 ("FLOW")
    *   +4   u8   formatVersion
@@ -1444,32 +1444,28 @@ class Assembler {
       }
     };
 
-    // Header (32 bytes)
-    parts.push(
-      (PROGRAM_MAGIC >>> 24) & 0xFF,
-      (PROGRAM_MAGIC >>> 16) & 0xFF,
-      (PROGRAM_MAGIC >>> 8) & 0xFF,
-      PROGRAM_MAGIC & 0xFF,
-    );
+    // Header (32 bytes). Magic is a byte signature; the numeric fields below
+    // are little-endian.
+    parts.push(...PROGRAM_MAGIC);
     parts.push(image.formatVersion & 0xFF);
     parts.push(image.isaVersion & 0xFF);
     parts.push(image.minAbiVersion & 0xFF);
     parts.push(image.minFirmwareVersion & 0xFF);
-    parts.push((image.entryPoint >> 8) & 0xFF);
     parts.push(image.entryPoint & 0xFF);
-    parts.push((tocOffset >> 8) & 0xFF);
+    parts.push((image.entryPoint >> 8) & 0xFF);
     parts.push(tocOffset & 0xFF);
-    parts.push((segments.length >> 8) & 0xFF);
+    parts.push((tocOffset >> 8) & 0xFF);
     parts.push(segments.length & 0xFF);
+    parts.push((segments.length >> 8) & 0xFF);
     parts.push(0, 0); // header flags
     parts.push(
       0x52, 0x4F, 0x4D, 0x32, // "ROM2"
     );
     parts.push(
-      (payloadSize >>> 24) & 0xFF,
-      (payloadSize >>> 16) & 0xFF,
-      (payloadSize >>> 8) & 0xFF,
       payloadSize & 0xFF,
+      (payloadSize >>> 8) & 0xFF,
+      (payloadSize >>> 16) & 0xFF,
+      (payloadSize >>> 24) & 0xFF,
     );
     parts.push(0, 0, 0, 0); // reserved
     parts.push(0, 0, 0, 0); // reserved
@@ -1479,19 +1475,19 @@ class Assembler {
       const segment = segments[i];
       parts.push(segment.type & 0xFF);
       parts.push(segment.flags & 0xFF);
-      parts.push((segment.virtualAddress >> 8) & 0xFF);
       parts.push(segment.virtualAddress & 0xFF);
+      parts.push((segment.virtualAddress >> 8) & 0xFF);
       const offset = offsets[i];
       parts.push(
-        (offset >>> 24) & 0xFF,
-        (offset >>> 16) & 0xFF,
-        (offset >>> 8) & 0xFF,
         offset & 0xFF,
+        (offset >>> 8) & 0xFF,
+        (offset >>> 16) & 0xFF,
+        (offset >>> 24) & 0xFF,
       );
-      parts.push((segment.data.length >> 8) & 0xFF);
       parts.push(segment.data.length & 0xFF);
-      parts.push((segment.memSize >> 8) & 0xFF);
+      parts.push((segment.data.length >> 8) & 0xFF);
       parts.push(segment.memSize & 0xFF);
+      parts.push((segment.memSize >> 8) & 0xFF);
       parts.push(0, 0, 0, 0); // reserved
     }
 

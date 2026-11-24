@@ -69,8 +69,8 @@ final class PolicyPrograms {
             int addr = SCRATCH + i;
             code.write(Opcode.STB);
             code.write(5);
-            code.write((addr >> 8) & 0xFF);
             code.write(addr & 0xFF);
+            code.write((addr >> 8) & 0xFF);
         }
 
         emitHost(code);
@@ -81,8 +81,8 @@ final class PolicyPrograms {
     private static void emitLi(ByteArrayOutputStream code, int rd, int imm) {
         code.write(Opcode.LI);
         code.write(rd);
-        code.write((imm >> 8) & 0xFF);
         code.write(imm & 0xFF);
+        code.write((imm >> 8) & 0xFF);
     }
 
     private static void emitHost(ByteArrayOutputStream code) {
