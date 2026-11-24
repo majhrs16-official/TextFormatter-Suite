@@ -27,7 +27,9 @@ Un resumen, un checkpoint o un reinicio de sesión que conserven el contexto no 
 Ante una contradicción, aplica este orden:
 
 1. ADR aceptado: `docs/workdir/ADR.md`.
-2. Especificación vigente: `docs/prompts/especificaciones/` y `docs/prompts/diseno/storage.md`.
+2. Especificación vigente: `docs/prompts/especificaciones/`, `docs/prompts/diseno/storage.md` y
+   los contratos delegados de ADR en `docs/prompts/diseno/` (`pipeline-sync-v1.md`,
+   `iflow-32-contract.md`).
 3. Código real: evidencia de comportamiento, no autoridad normativa.
 4. `docs/workdir/PLAN.md`: estado y trabajo activo; no crea contratos.
 5. `.opencode/skills/`: procedimientos; no crean contratos.

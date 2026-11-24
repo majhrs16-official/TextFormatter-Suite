@@ -26,9 +26,10 @@ Reglas:
 
 1. Un módulo declara `provide(Capability.of("<nombre>", ...))`.
 2. Un submódulo declara `provide(...)` de su propia capability y **no** exige al padre: publica su
-   puerto neutral (`SyncSink`, `TranslatorProvider`, …) y el padre lo descubre (ADR-036 §15). Solo
-   declara `require(...)` cuando la dependencia es estructural e imposible de resolver por
-   descubrimiento (por ejemplo, `manager-apt`/`manager-core` sobre la API de `manager-spi`).
+   puerto neutral (`SyncSink`, `TranslatorProvider`, …) y el padre lo descubre
+   (`docs/prompts/diseno/pipeline-sync-v1.md` §15). Solo declara `require(...)` cuando la
+   dependencia es estructural e imposible de resolver por descubrimiento (por ejemplo,
+   `manager-apt`/`manager-core` sobre la API de `manager-spi`).
 3. Cada módulo y submódulo es dueño de `config/<id>/config.yml` (o de sus subarchivos).
 4. El módulo padre solo coordina; no parsea la configuración de sus submódulos.
 
@@ -167,7 +168,8 @@ según la prioridad fijada en ADR-032.
 #### 4.1.1 `config/iflow/grants.yml` — concesiones de programas
 
 Dueño: `suite-runtime` (`YamlProgramGrantStore`). Autoriza acciones de programas iFlow de terceros
-(ADR-036 §16.6). El índice es el SHA-256 en minúsculas de la imagen del programa, nunca su nombre.
+(`docs/prompts/diseno/pipeline-sync-v1.md` §16.6). El índice es el SHA-256 en minúsculas de la
+imagen del programa, nunca su nombre.
 
 ```yaml
 defaults:

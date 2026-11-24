@@ -171,7 +171,8 @@ tasks.register('checkArchitecture') {
             }
         }
 
-        // ADR-036 §14: no feature descriptor may require another feature.
+        // docs/prompts/diseno/pipeline-sync-v1.md §14:
+        // no feature descriptor may require another feature.
         // Only capabilities published by the environment or by neutral
         // technical modules are requirable. `stage:*` and `sync:*` are
         // declarative capabilities and can never be the object of a

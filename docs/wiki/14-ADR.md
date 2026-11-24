@@ -33,7 +33,8 @@ document before changing architecture, contracts or configuration.
 ## Precedence
 
 1. Accepted ADRs in [`docs/workdir/ADR.md`](../workdir/ADR.md).
-2. Current specifications in [`docs/prompts/especificaciones/`](../prompts/especificaciones/).
+2. Current specifications in [`docs/prompts/`](../prompts/), in particular `especificaciones/`
+   and the delegated contracts under `diseno/`.
 3. Real code and tests as evidence, never as authority to override an ADR.
 4. `PLAN.md` for operational status.
 5. This wiki for user-facing explanations.

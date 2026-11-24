@@ -24,7 +24,7 @@ v3 sigue pendiente (W3.5).
 | `PolicyAbiV3` (nombres, firmas, estados, acciones, propiedades) | ✅ W1 |
 | `TlvCodec` (UTF-8 estricto, nulo vs vacío; compartido en `core-api`) | ✅ W1 |
 | Host functions `iflow.*` sobre `PolicySession` | ✅ W2 |
-| Puente `sync_surface`/`sync_invoke` (ADR-036 §16.7) | ✅ 2026-11-13 |
+| Puente `sync_surface`/`sync_invoke` (docs/prompts/diseno/pipeline-sync-v1.md §16.7) | ✅ 2026-11-13 |
 | `WasmPolicyEngine` (evaluación aislada) | ✅ W2 |
 | `WasmPolicyRouter` conectado a `Router` | ✅ W3 |
 | SHA-256 obligatorio del `.wasm` y hot-reload automático | ✅ W3 |
@@ -189,12 +189,13 @@ mensaje transformado.
 - **Fallos:** cualquier error de carga, instanciación o ejecución se convierte en
   `PolicyOutcome.error(...)`; el host no recibe excepciones de un artefacto no confiable.
 
-## Puente sync (ADR-036 §16.7)
+## Puente sync
 
-`sync_surface` y `sync_invoke` son imports genéricos: no hay un import por acción. El payload y el
-contrato de cable son los mismos que en las líneas VM (`TlvCodec` y `SyncBridgeCodec` de `core-api`),
-y los estados canónicos (`OK`, `DENIED`, `UNSUPPORTED`, `INVALID_ARGUMENT`, `NOT_FOUND`,
-`CONFLICT`, `RATE_LIMITED`, `TIMEOUT`, `HOST_FAILURE`) se proyectan al registro del ABI v3.
+Contrato en `docs/prompts/diseno/pipeline-sync-v1.md` §16.7. `sync_surface` y `sync_invoke` son
+imports genéricos: no hay un import por acción. El payload y el contrato de cable son los mismos
+que en las líneas VM (`TlvCodec` y `SyncBridgeCodec` de `core-api`), y los estados canónicos
+(`OK`, `DENIED`, `UNSUPPORTED`, `INVALID_ARGUMENT`, `NOT_FOUND`, `CONFLICT`, `RATE_LIMITED`,
+`TIMEOUT`, `HOST_FAILURE`) se proyectan al registro del ABI v3.
 
 - **Identidad:** `Principal.Program(SHA-256)` con el hash verificado de `policy.wasm` que guarda
   `WasmPolicyRouter.reload()`. Sin hash verificado, `sync_invoke` devuelve `UNSUPPORTED`.

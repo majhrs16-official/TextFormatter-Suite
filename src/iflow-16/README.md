@@ -225,10 +225,10 @@ Servicios añadidos en el lote 6 (D26):
   (`0x7000`) al destino vía DMA.
 - `MESSAGE_ID` (0x0701): escribe el id del mensaje en el buffer.
 
-Puente sync (ADR-036 §16.7). `SYNC_SURFACE` (0x0800) y `SYNC_INVOKE` (0x0801) son servicios
-genéricos: no hay una instrucción ni un servicio por acción. Ambos usan el `TlvCodec` compartido de
-`core-api` y el contrato de cable `SyncBridgeCodec`, con la misma codificación que los imports
-`sync_surface`/`sync_invoke` de `iflow-wasm`.
+Puente sync (`docs/prompts/diseno/pipeline-sync-v1.md` §16.7). `SYNC_SURFACE` (0x0800) y
+`SYNC_INVOKE` (0x0801) son servicios genéricos: no hay una instrucción ni un servicio por acción.
+Ambos usan el `TlvCodec` compartido de `core-api` y el contrato de cable `SyncBridgeCodec`, con la
+misma codificación que los imports `sync_surface`/`sync_invoke` de `iflow-wasm`.
 
 - Petición y respuesta van por `R2`/`R3` y se transfieren con DMA. La respuesta **sobrescribe** la
   petición; al salir, `R3` son los bytes escritos. Si no cabe, `BUFFER_TOO_SMALL` deja el tamaño
@@ -395,7 +395,7 @@ RouteOutcome outcome = engine.route(message, recipient);
 | `ExecutionContextTest` | Pool/registros y cableado del bus (D18) y del DMA (D17) |
 | `ExecutionContextPoolTest` | Pool, reset entre ejecuciones, cota de retención bajo concurrencia |
 | `HostServiceRegistryTest` | ABI v2 de los 17 servicios HOST, capabilities, journal, transferencias vía DMA, copy-on-write del buffer; puente sync (superficies, filtro por backend, mapeo de estados, petición malformada) |
-| `PassThroughProgramTest` | La política oficial no declara `sync.invoke` ni `sync.surface` (ADR-036 §16.7) |
+| `PassThroughProgramTest` | La política oficial no declara `sync.invoke` ni `sync.surface` (docs/prompts/diseno/pipeline-sync-v1.md §16.7) |
 | `VmPolicyEngineTest` | Integración Router + VM; concurrencia del intérprete compartido por programa; `CHANNEL_POLICY` extremo a extremo; persistencia de la memoria de la máquina entre mensajes (D30); pantalla mapeada en memoria (D31); puente sync (mutación, conflicto y `UNSUPPORTED` sin bus) |
 | `VmDisplayTest` | Periférico de vídeo: decodificación de la ventana y del banco de registros, geometría, carácter/atributo, bloques, limpieza y render ANSI (D31) |
 | `VmNvramTest` | NVRAM del BIOS: decodificación de ventana, R/W byte/palabra/bloque, ventana por defecto (D32) |

@@ -50,7 +50,7 @@ Estado verificado:
 | **V5 — herramientas v3** | Assembler `.flowasm` v3 adelantado en V3-2a | Firmware completo, ejemplos y validador | V4 para el corpus | ADR-037 |
 | **V6 — compilador C** | Diseño aceptado; implementación pendiente | C0 (subconjunto y ABI) cuando V5 cierre | Bloqueado por V5 | ADR-023 |
 | **W3.5 — paridad** | Contrato cerrado en ADR-031/ADR-036; implementación pendiente | Matriz `.flow` v3 ↔ `.wasm`, tests negativos y conformidad cruzada | Requiere V4 y el puente VM/Wasm | ADR-031, ADR-036 |
-| **PL-2 — sync restante** | Superficies principales implementadas | Slices pendientes por backend y deuda de nombres | Ninguno; prioridad media | ADR-036 §16 |
+| **PL-2 — sync restante** | Superficies principales implementadas | Slices pendientes por backend y deuda de nombres | Ninguno; prioridad media | ADR-036; docs/prompts/diseno/pipeline-sync-v1.md §16 |
 | **PL-4 — decisiones** | Editor web implementado en su alcance | Recalibrar límites anti-bomba; decidir exclusiones v3 | Requiere datos reales y contrato v3 | ADR-036, PL-4 |
 | **PL-5 — config en vivo** | Propuesta, sin ADR aceptado | Cerrar esquema, protocolo y autorización | V4 y gate de `iflow-32` | Propuesta PL-5 |
 | **PL-6 — caches/persistencia** | Etapa 1 en curso | Cerrar coherencia, ext4/FAT32 y editor de nodos | V4, revisión legal y modelo de memoria | Propuesta PL-6 |

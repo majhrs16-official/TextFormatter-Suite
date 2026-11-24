@@ -264,20 +264,22 @@ implementadas**; su ejecución pertenece a W3.5 y a las fases de render/dispatch
 | ABI de entrada/salida | **TLV.** Campos tipo-longitud-valor, ausencia explícita distinta de cadena vacía y UTF-8 sin truncar. |
 | Decisiones múltiples | **Error y abortar.** Una sola decisión de routing por ejecución; una segunda produce `DECISION_CONFLICT` y no se entrega. D41 ya prohibía “la última gana”. |
 
-> **Actualización 2026-11-13 (ADR-036 §16.5).** El import dedicado `set_channel` de la ABI v3 se
-> retira. El cambio de canal se expresa con la acción agnóstica `textformatter.channel.set`,
-> invocada mediante `sync_invoke("textformatter", "channel.set", ...)`. La acción conserva la
-> validación de existencia y permisos de D02 y dispara la segunda fase de routing de §7; no hay
-> alias ni doble lector (ADR-034). Las referencias históricas a `SET_CHANNEL` en este documento
-> describen el baseline anterior y no el contrato vigente.
+> **Actualización 2026-11-13 (`docs/prompts/diseno/pipeline-sync-v1.md` §16.5).** El import
+> dedicado `set_channel` de la ABI v3 se retira. El cambio de canal se expresa con la acción
+> agnóstica `textformatter.channel.set`, invocada mediante
+> `sync_invoke("textformatter", "channel.set", ...)`. La acción conserva la validación de
+> existencia y permisos de D02 y dispara la segunda fase de routing de §7; no hay alias ni doble
+> lector (ADR-034). Las referencias históricas a `SET_CHANNEL` en este documento describen el
+> baseline anterior y no el contrato vigente.
 >
-> **Actualización 2026-11-13 (ADR-036 §16.7).** El puente genérico se concreta en dos operaciones,
-> no en una por acción: la VM expone los servicios `HOST` `SYNC_SURFACE` (`0x0800`) y `SYNC_INVOKE`
-> (`0x0801`), y la ABI v3 expone `sync_surface`/`sync_invoke` con la misma codificación. Ambos usan
-> el `TlvCodec` y el contrato de cable `SyncBridgeCodec` de `core-api`, y proyectan los mismos
-> estados canónicos. La autoridad se resuelve por `Principal.Program(SHA-256)`; sin identidad
-> verificada la operación devuelve `UNSUPPORTED`. El detalle del layout, los estados y la convención
-> de buffer vive en el ADR y no se duplica aquí.
+> **Actualización 2026-11-13 (`docs/prompts/diseno/pipeline-sync-v1.md` §16.7).** El puente
+> genérico se concreta en dos operaciones, no en una por acción: la VM expone los servicios `HOST`
+> `SYNC_SURFACE` (`0x0800`) y `SYNC_INVOKE` (`0x0801`), y la ABI v3 expone
+> `sync_surface`/`sync_invoke` con la misma codificación. Ambos usan el `TlvCodec` y el contrato de
+> cable `SyncBridgeCodec` de `core-api`, y proyectan los mismos estados canónicos. La autoridad se
+> resuelve por `Principal.Program(SHA-256)`; sin identidad verificada la operación devuelve
+> `UNSUPPORTED`. El detalle del layout, los estados y la convención de buffer vive en
+> `pipeline-sync-v1.md` y no se duplica aquí.
 
 ## 6. Matemática de la cola: correcciones y límites
 

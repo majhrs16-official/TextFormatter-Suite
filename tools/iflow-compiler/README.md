@@ -217,9 +217,9 @@ MOV R3, R7     ; byte = 0x37
 
 ## Backend v3 (`-f iflow-32`)
 
-El módulo `src/v3/` ensambla la ISA de 32 bits de `iflow-32` (ADR-037 §3–§4) y
-emite el contenedor `FLOWROM` v3 (§8). Es independiente del ensamblador v2: no
-importa sus opcodes, registros, secciones ni formato binario.
+El módulo `src/v3/` ensambla la ISA de 32 bits de `iflow-32`
+(`docs/prompts/diseno/iflow-32-contract.md` §3–§4) y emite el contenedor `FLOWROM` v3 (§8). Es
+independiente del ensamblador v2: no importa sus opcodes, registros, secciones ni formato binario.
 
 ```bash
 npm run build
@@ -247,9 +247,9 @@ este formato.
 
 Un ROM exige exactamente un `BIOS`, un `BOOT` y un `KERNEL`; admite hasta 64
 `PROGRAM`. Cada `org` debe estar alineado a 4 KiB. El ensamblador aplica las
-reglas por tipo de ADR-037 §8.5: BIOS R/X en `0`, BOOT/KERNEL en espacio de
-kernel, PROGRAM en espacio de usuario con `U=1` y `W=0`, DATA como datos
-supervisor, y rechaza `W && X`.
+reglas por tipo de `docs/prompts/diseno/iflow-32-contract.md` §8.5: BIOS R/X en `0`,
+BOOT/KERNEL en espacio de kernel, PROGRAM en espacio de usuario con `U=1` y `W=0`,
+DATA como datos supervisor, y rechaza `W && X`.
 
 ### Directivas
 

@@ -37,8 +37,9 @@
 - `host/v3`: envelope TLV, identidad, capacidades y puente de servicios `HostBridge`; `HostAbi`
   abre un `HostContext` por `MIDENT` y `MessageJournal` conserva el write set provisional y el
   latch único de `ROUTE_DECISION` hasta el commit o aborto de la unidad. `V3HostBridge` resuelve el
-  vocabulario `scope`/`property` de ADR-037 §7.14 contra la unidad abierta, aplica el write set como
-  lote atómico y traduce `ROUTE_DECISION` a la decisión del host.
+  vocabulario `scope`/`property` de `docs/prompts/diseno/iflow-32-contract.md` §7.14 contra la
+  unidad abierta, aplica el write set como lote atómico y traduce `ROUTE_DECISION` a la decisión
+  del host.
 - `engine/v3`: `Iflow32Router` implementa `Router`; carga `policy.flow`, arranca el kernel una vez
   por recarga, publica cada mensaje en el mailbox y mapea `DELIVER`→`LOG`,
   `CANCEL_EVENT`→`DROP` y `ERROR`→`REJECT`. `Iflow32Activator` publica el router y el

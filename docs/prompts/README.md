@@ -37,6 +37,8 @@ contexto/philosophy.md                   filosofía y principios de ingeniería
 diseno/storage.md                        layout canónico de configuración en disco
 diseno/iflow-cpu-design.md               documento histórico de diseño del CPU virtual de iFlow
 diseno/iflow-cpu-implement.md            especificación técnica de referencia v3 de iflow-vm (32 bits)
+diseno/iflow-32-contract.md              contrato de máquina, ISA y ABI HOST v3 de iflow-32 (ADR-037)
+diseno/pipeline-sync-v1.md               contrato del pipeline y sincronización (ADR-036)
 diseno/logger.md                         diseño del sistema de logging
 diseno/manager-v2.md                     reingeniería del Module Manager (APT/dpkg)
 diseno/chattranslator.md                 fachada de traducción y contrato de proveedores
